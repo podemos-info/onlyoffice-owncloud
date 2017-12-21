@@ -386,6 +386,7 @@ class EditorController extends Controller {
             "documentType" => $format["type"],
             "editorConfig" => [
                 "callbackUrl" => $callback,
+		        "forcesave" => True, //No parece funcionar
                 "customization" => [
                     "goback" => [
                         "url" => $folderLink

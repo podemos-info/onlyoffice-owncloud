@@ -41,6 +41,7 @@ use OCP\IUserSession;
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
 use OCA\Onlyoffice\DocumentService;
+use OCP\Share\IManager as IShareManager;
 
 /**
  * Callback handler for the document server.
@@ -69,6 +70,13 @@ class CallbackController extends Controller {
      * @var IUserManager
      */
     private $userManager;
+
+    /**
+     * Share manager
+     *
+     * @var IShareManager
+     */
+    private $shareManager;
 
     /**
      * l10n service
@@ -127,6 +135,7 @@ class CallbackController extends Controller {
                                     IRootFolder $root,
                                     IUserSession $userSession,
                                     IUserManager $userManager,
+                                    IShareManager $shareManager,
                                     IL10N $trans,
                                     ILogger $logger,
                                     AppConfig $config,
@@ -137,6 +146,7 @@ class CallbackController extends Controller {
         $this->root = $root;
         $this->userSession = $userSession;
         $this->userManager = $userManager;
+        $this->shareManager = $shareManager;
         $this->trans = $trans;
         $this->logger = $logger;
         $this->config = $config;
@@ -329,7 +339,9 @@ class CallbackController extends Controller {
         $error = 1;
         switch ($trackerStatus) {
             case "MustSave":
+            $this->logger->error("MustSave");
             case "Corrupted":
+            $this->logger->error("Corrupted");
                 if (empty($url)) {
                     $this->logger->info("Track without url: " . $fileId . " status " . $trackerStatus, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("Url not found")], Http::STATUS_BAD_REQUEST);
@@ -346,12 +358,17 @@ class CallbackController extends Controller {
                     return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
                 }
                 $file = $files[0];
-
                 if (! $file instanceof File) {
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-
+foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+    $this->logger->error("filepath. ".$file->getPath());
+    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
+    $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
+    $this->root->getUserFolder($sharedUser)->get($path."/.~lock.".$file->getName()."#")->delete();
+    $this->root->getUserFolder($sharedUser)->get($path."/.~lockonlyoffice.".$file->getName()."#")->delete();
+}
                 $fileName = $file->getName();
                 $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 $downloadExt = strtolower(pathinfo($url, PATHINFO_EXTENSION));
@@ -393,12 +410,72 @@ class CallbackController extends Controller {
 
                 if (($newData = $documentService->Request($url))) {
                     $file->putContent($newData);
+
                     $error = 0;
                 }
                 break;
 
             case "Editing":
+                $this->logger->error("Editing");
+                $userId = $hashData->userId;
+                $files = $this->root->getUserFolder($userId)->getById($fileId);
+                if (empty($files)) {
+                    $this->logger->info("Files for track not found: " . $fileId, array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
+                }
+                $file = $files[0];
+
+                if (! $file instanceof File) {
+                    $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
+                }
+                if ($this->root->getUserFolder($userId)->nodeExists(".~lock.".$file->getName()."#")) {
+                    $this->logger->error('archivo lock existe');
+                    if ($this->root->getUserFolder($userId)->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                       $this->logger->error('y existe lockonlyoffice. permitir acceso');
+                    } else {
+                        $this->logger->error('no existe lockonlyoffice. denegar acceso');
+                        $error = 1;
+                        break;
+                    }
+                } else {
+                    $this->logger->error('archivo lock no existe');
+                    $this->logger->error("filepath. ".$file->getPath());
+                    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
+                    foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+                        //TODO FILE->GETPATH SOLO RETORNA EL PATH DESDE EL USUARIO ACTUAL SUSTITUAR EL ID DE USUARIO POR CADA USUARIO
+                        $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
+                        $file->copy($path."/.~lock.".$file->getName()."#");
+                        $file->copy($path."/.~lockonlyoffice.".$file->getName()."#");
+                        //$this->root->getUserFolder($sharedUser)->newFile(".~lock.".$file->getName()."#");
+                        //$this->root->getUserFolder($sharedUser)->newFile(".~lockonlyoffice.".$file->getName()."#");
+                        //$file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
+                    }
+                }
+
+                $error = 0;
+                break;
             case "Closed":
+                $this->logger->error("Closed");
+                $userId = $hashData->userId;
+                $files = $this->root->getUserFolder($userId)->getById($fileId);
+                if (empty($files)) {
+                    $this->logger->info("Files for track not found: " . $fileId, array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
+                }
+                $file = $files[0];
+
+                if (! $file instanceof File) {
+                    $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
+                }
+                foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+                    $this->logger->error("filepath. ".$file->getPath());
+                    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
+                    $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
+                    $this->root->getUserFolder($sharedUser)->get($path."/.~lock.".$file->getName()."#")->delete();
+                    $this->root->getUserFolder($sharedUser)->get($path."/.~lockonlyoffice.".$file->getName()."#")->delete();
+                }
                 $error = 0;
                 break;
         }

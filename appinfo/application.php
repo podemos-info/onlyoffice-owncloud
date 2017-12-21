@@ -131,6 +131,7 @@ class Application extends App {
                 $c->query("RootStorage"),
                 $c->query("UserSession"),
                 $c->query("ServerContainer")->getUserManager(),
+                $c->query("ServerContainer")->getShareManager(),
                 $c->query("L10N"),
                 $c->query("Logger"),
                 $this->appConfig,
