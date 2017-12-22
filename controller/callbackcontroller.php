@@ -367,7 +367,7 @@ class CallbackController extends Controller {
                 }
     if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
         $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
-        $file->getParent()->get("/.~lockonlyoffice.".$file->getName()."#")->delete();
+        $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
         $file->getParent()->get(".~$".$file->getName())->delete();
     }
                 $fileName = $file->getName();
@@ -471,9 +471,6 @@ class CallbackController extends Controller {
                             $sharedUser != $userId &&
                             $file->getParent()->getOwner()->getUID() != $sharedUser
                         ) {
-                            $this->logger->error('compartiendo con: '.$sharedUser);
-                            $this->logger->error('userId: '.$userId);
-                            $this->logger->error('folderOwner: '.$file->getParent()->getOwner()->getUID());
                             foreach ([$fileNodeOnlyoffice, $fileNodeLibreOffice, $fileNodePagaOffice] as $shareFile) {
                                 if ($sharedUser == $userId) {
                                     continue;
@@ -497,24 +494,6 @@ class CallbackController extends Controller {
                             }
 
                         }
-                        
-                                                
-                        
-
-                        //TODO FILE->GETPATH SOLO RETORNA EL PATH DESDE EL USUARIO ACTUAL SUSTITUAR EL ID DE USUARIO POR CADA USUARIO
-                       /* $userIdPath = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-                        $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-                        $sharedUserpPath = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-
-                        $this->logger->error('userIdPath:'. $userIdPath);
-                        $this->logger->error('path: '.$path);
-                        $this->logger->error('sharedUserpPath: '.$sharedUserpPath);*/
-
-                        //$file->copy($path."/.~lock.".$file->getName()."#");
-                        //$file->copy($path."/.~lockonlyoffice.".$file->getName()."#");
-                        //$this->root->getUserFolder($sharedUser)->newFile(".~lock.".$file->getName()."#");
-                        //$this->root->getUserFolder($sharedUser)->newFile(".~lockonlyoffice.".$file->getName()."#");
-                        //$file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
                     }
                 }
 
