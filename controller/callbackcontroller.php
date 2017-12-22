@@ -37,6 +37,9 @@ use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use OCP\AppFramework\OCS\OCSForbiddenException;
+use OCP\AppFramework\OCS\OCSException;
+use OCP\Share\Exceptions\GenericShareException;
 
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
@@ -362,13 +365,10 @@ class CallbackController extends Controller {
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-    $this->logger->error("filepath. ".$file->getPath());
-    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
-    $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-    $this->root->getUserFolder($sharedUser)->get($path."/.~lock.".$file->getName()."#")->delete();
-    $this->root->getUserFolder($sharedUser)->get($path."/.~lockonlyoffice.".$file->getName()."#")->delete();
-}
+    if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+        $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
+        $file->getParent()->get("/.~lockonlyoffice.".$file->getName()."#")->delete();
+    }
                 $fileName = $file->getName();
                 $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 $downloadExt = strtolower(pathinfo($url, PATHINFO_EXTENSION));
@@ -429,24 +429,81 @@ foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUs
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-                if ($this->root->getUserFolder($userId)->nodeExists(".~lock.".$file->getName()."#")) {
+                $areInAnyWhere = False;
+                $userWhoOpenId = $userId;
+                foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+                    $this->logger->error('todos los usuarios con acceso, path to node exist: '.$this->root->getUserFolder($sharedUser)->getPath()."/.~lock.".$file->getName()."#");
+
+
+                    // Comprobar esta condición deberia poder encontrar uno de los archivos ocultos en cualquiera de los usuarios. COndición no funciona.
+                    if ($this->root->getUserFolder($sharedUser)->nodeExists($this->root->getUserFolder($sharedUser)->getPath()."/.~lock.".$file->getName()."#")) {
+                        $this->logger->error("true");
+                        $areInAnyWhere = True;
+                        $userWhoOpenId = $sharedUser;
+                    }
+                }
+                if (
+                    $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lock.".$file->getName()."#") ||
+                    $areInAnyWhere
+                ) {
                     $this->logger->error('archivo lock existe');
-                    if ($this->root->getUserFolder($userId)->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                    
+                    if ($this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
                        $this->logger->error('y existe lockonlyoffice. permitir acceso');
                     } else {
                         $this->logger->error('no existe lockonlyoffice. denegar acceso');
                         $error = 1;
+                        return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                         break;
                     }
                 } else {
-                    $this->logger->error('archivo lock no existe');
-                    $this->logger->error("filepath. ".$file->getPath());
-                    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
+                    $fileNodeLibreOffice = $file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
+                    $fileNodeOnlyoffice = $file->copy($file->getParent()->getPath()."/.~lockonlyoffice.".$file->getName()."#");
                     foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+                        $newPermissions = \OCP\Constants::PERMISSION_READ | \OCP\Constants::PERMISSION_CREATE | \OCP\Constants::PERMISSION_UPDATE | \OCP\Constants::PERMISSION_DELETE;
+                        if (
+                            $sharedUser != $userId &&
+                            $file->getParent()->getOwner() != $userId
+                        ) {
+                            $this->logger->error('compartiendo con: '.$sharedUser);
+                            foreach ([$fileNodeOnlyoffice, $fileNodeLibreOffice] as $shareFile) {
+                                if ($sharedUser == $userId) {
+                                    continue;
+                                }
+                                $share = $this->shareManager->newShare($file->getParent(), $this->userManager);
+                                $share->setNode($shareFile); // path del node con la ruta tipo /carpeta si hubera/nobrearchio.extesnions
+                                $share->setSharedWith($sharedUser);
+                                $share->setShareType(\OCP\Share::SHARE_TYPE_USER);
+                                $share->setSharedBy($userId);
+                                $share->setShareOwner($userId);
+                                $share->setPermissions(\OCP\Constants::PERMISSION_READ);
+                                $share->setExpirationDate(null);
+                                try {
+                                    $share = $this->shareManager->createShare($share);
+                                } catch (GenericShareException $e) {
+                                    $code = $e->getCode() === 0 ? 403 : $e->getCode();
+                                    throw new OCSException($e->getHint(), $code);
+                                } catch (\Exception $e) {
+                                    throw new OCSForbiddenException($e->getMessage());
+                                }
+                            }
+
+                        }
+                        
+                                                
+                        
+
                         //TODO FILE->GETPATH SOLO RETORNA EL PATH DESDE EL USUARIO ACTUAL SUSTITUAR EL ID DE USUARIO POR CADA USUARIO
+                       /* $userIdPath = str_replace($userId, $sharedUser, $file->getParent()->getPath());
                         $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-                        $file->copy($path."/.~lock.".$file->getName()."#");
-                        $file->copy($path."/.~lockonlyoffice.".$file->getName()."#");
+                        $sharedUserpPath = str_replace($userId, $sharedUser, $file->getParent()->getPath());
+
+                        $this->logger->error('userIdPath:'. $userIdPath);
+                        $this->logger->error('path: '.$path);
+                        $this->logger->error('sharedUserpPath: '.$sharedUserpPath);*/
+
+                        //$file->copy($path."/.~lock.".$file->getName()."#");
+                        //$file->copy($path."/.~lockonlyoffice.".$file->getName()."#");
                         //$this->root->getUserFolder($sharedUser)->newFile(".~lock.".$file->getName()."#");
                         //$this->root->getUserFolder($sharedUser)->newFile(".~lockonlyoffice.".$file->getName()."#");
                         //$file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
@@ -469,12 +526,9 @@ foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUs
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-                foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-                    $this->logger->error("filepath. ".$file->getPath());
-                    $this->logger->error("parent folder path. ".$file->getParent()->getPath());
-                    $path = str_replace($userId, $sharedUser, $file->getParent()->getPath());
-                    $this->root->getUserFolder($sharedUser)->get($path."/.~lock.".$file->getName()."#")->delete();
-                    $this->root->getUserFolder($sharedUser)->get($path."/.~lockonlyoffice.".$file->getName()."#")->delete();
+                if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                    $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
+                    $file->getParent()->get("/.~lockonlyoffice.".$file->getName()."#")->delete();
                 }
                 $error = 0;
                 break;
