@@ -368,6 +368,7 @@ class CallbackController extends Controller {
     if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
         $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
         $file->getParent()->get("/.~lockonlyoffice.".$file->getName()."#")->delete();
+        $file->getParent()->get(".~$".$file->getName())->delete();
     }
                 $fileName = $file->getName();
                 $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
@@ -432,11 +433,12 @@ class CallbackController extends Controller {
                 $areInAnyWhere = False;
                 $userWhoOpenId = $userId;
                 foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-                    $this->logger->error('todos los usuarios con acceso, path to node exist: '.$this->root->getUserFolder($sharedUser)->getPath()."/.~lock.".$file->getName()."#");
-
-
-                    // Comprobar esta condición deberia poder encontrar uno de los archivos ocultos en cualquiera de los usuarios. COndición no funciona.
-                    if ($this->root->getUserFolder($sharedUser)->nodeExists($this->root->getUserFolder($sharedUser)->getPath()."/.~lock.".$file->getName()."#")) {
+                    $shareFile = $this->root->getUserFolder($sharedUser)->getById($file->getId());
+                    $shareFile = $shareFile[0];
+                    if (
+                        $shareFile->getParent()->nodeExists(".~lock.".$file->getName()."#") ||
+                        $shareFile->getParent()->nodeExists(".~$".$file->getName())
+                    ) {
                         $this->logger->error("true");
                         $areInAnyWhere = True;
                         $userWhoOpenId = $sharedUser;
@@ -444,11 +446,15 @@ class CallbackController extends Controller {
                 }
                 if (
                     $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lock.".$file->getName()."#") ||
-                    $areInAnyWhere
+                    $areInAnyWhere ||
+                    $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
                 ) {
                     $this->logger->error('archivo lock existe');
                     
-                    if ($this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                    if (
+                        $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lockonlyoffice.".$file->getName()."#") ||
+                        $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
+                    ) {
                        $this->logger->error('y existe lockonlyoffice. permitir acceso');
                     } else {
                         $this->logger->error('no existe lockonlyoffice. denegar acceso');
@@ -459,14 +465,16 @@ class CallbackController extends Controller {
                 } else {
                     $fileNodeLibreOffice = $file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
                     $fileNodeOnlyoffice = $file->copy($file->getParent()->getPath()."/.~lockonlyoffice.".$file->getName()."#");
+                    $fileNodePagaOffice = $file->copy($file->getParent()->getPath()."/.~$".$file->getName());
                     foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-                        $newPermissions = \OCP\Constants::PERMISSION_READ | \OCP\Constants::PERMISSION_CREATE | \OCP\Constants::PERMISSION_UPDATE | \OCP\Constants::PERMISSION_DELETE;
                         if (
                             $sharedUser != $userId &&
-                            $file->getParent()->getOwner() != $userId
+                            $file->getParent()->getOwner()->getUID() != $sharedUser
                         ) {
                             $this->logger->error('compartiendo con: '.$sharedUser);
-                            foreach ([$fileNodeOnlyoffice, $fileNodeLibreOffice] as $shareFile) {
+                            $this->logger->error('userId: '.$userId);
+                            $this->logger->error('folderOwner: '.$file->getParent()->getOwner()->getUID());
+                            foreach ([$fileNodeOnlyoffice, $fileNodeLibreOffice, $fileNodePagaOffice] as $shareFile) {
                                 if ($sharedUser == $userId) {
                                     continue;
                                 }
@@ -526,9 +534,12 @@ class CallbackController extends Controller {
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-                if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                if (
+                    $file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")
+                ) {
                     $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
-                    $file->getParent()->get("/.~lockonlyoffice.".$file->getName()."#")->delete();
+                    $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
+                    $file->getParent()->get(".~$".$file->getName())->delete();
                 }
                 $error = 0;
                 break;
