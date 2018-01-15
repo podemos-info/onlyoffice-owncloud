@@ -25,6 +25,7 @@
  */
 
     style("onlyoffice", "editor");
+    style("onlyoffice", "fixes");
     script("onlyoffice", "editor");
 ?>
 

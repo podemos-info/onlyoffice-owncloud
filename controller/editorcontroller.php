@@ -364,6 +364,7 @@ class EditorController extends Controller {
                 "scrollto" => $file->getName()
             ]);
 
+
         $fileId = $file->getId();
         $hashCallback = $this->crypt->GetHash(["fileId" => $fileId, "userId" => $userId, "action" => "track"]);
         $fileUrl = $this->getUrl($file);
@@ -389,7 +390,7 @@ class EditorController extends Controller {
 		        "forcesave" => True, //No parece funcionar
                 "customization" => [
                     "goback" => [
-                        "url" => $folderLink
+                        "url" => ''
                     ]
                 ],
                 "lang" => str_replace("_", "-", \OC::$server->getL10NFactory("")->get("")->getLanguageCode()),
