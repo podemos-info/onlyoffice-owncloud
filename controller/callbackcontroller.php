@@ -342,9 +342,7 @@ class CallbackController extends Controller {
         $error = 1;
         switch ($trackerStatus) {
             case "MustSave":
-            $this->logger->error("MustSave");
             case "Corrupted":
-            $this->logger->error("Corrupted");
                 if (empty($url)) {
                     $this->logger->info("Track without url: " . $fileId . " status " . $trackerStatus, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("Url not found")], Http::STATUS_BAD_REQUEST);
@@ -365,11 +363,11 @@ class CallbackController extends Controller {
                     $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                 }
-    if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
-        $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
-        $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
-        $file->getParent()->get(".~$".$file->getName())->delete();
-    }
+                if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
+                    $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
+                    $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
+                    $file->getParent()->get(".~$".$file->getName())->delete();
+                }
                 $fileName = $file->getName();
                 $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 $downloadExt = strtolower(pathinfo($url, PATHINFO_EXTENSION));
@@ -417,7 +415,6 @@ class CallbackController extends Controller {
                 break;
 
             case "Editing":
-                $this->logger->error("Editing");
                 $userId = $hashData->userId;
                 $files = $this->root->getUserFolder($userId)->getById($fileId);
                 if (empty($files)) {
@@ -439,7 +436,6 @@ class CallbackController extends Controller {
                         $shareFile->getParent()->nodeExists(".~lock.".$file->getName()."#") ||
                         $shareFile->getParent()->nodeExists(".~$".$file->getName())
                     ) {
-                        $this->logger->error("true");
                         $areInAnyWhere = True;
                         $userWhoOpenId = $sharedUser;
                     }
@@ -449,15 +445,12 @@ class CallbackController extends Controller {
                     $areInAnyWhere ||
                     $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
                 ) {
-                    $this->logger->error('archivo lock existe');
                     
                     if (
                         $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lockonlyoffice.".$file->getName()."#") ||
                         $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
                     ) {
-                       $this->logger->error('y existe lockonlyoffice. permitir acceso');
                     } else {
-                        $this->logger->error('no existe lockonlyoffice. denegar acceso');
                         $error = 1;
                         return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
                         break;
@@ -482,6 +475,7 @@ class CallbackController extends Controller {
                                 $share->setSharedBy($userId);
                                 $share->setShareOwner($userId);
                                 $share->setPermissions(\OCP\Constants::PERMISSION_READ);
+                                $share->setPermissions(\OCP\Constants::PERMISSION_SHARE);
                                 $share->setExpirationDate(null);
                                 try {
                                     $share = $this->shareManager->createShare($share);
@@ -500,7 +494,6 @@ class CallbackController extends Controller {
                 $error = 0;
                 break;
             case "Closed":
-                $this->logger->error("Closed");
                 $userId = $hashData->userId;
                 $files = $this->root->getUserFolder($userId)->getById($fileId);
                 if (empty($files)) {
