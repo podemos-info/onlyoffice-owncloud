@@ -474,7 +474,7 @@ class CallbackController extends Controller {
                                 $share->setShareType(\OCP\Share::SHARE_TYPE_USER);
                                 $share->setSharedBy($userId);
                                 $share->setShareOwner($userId);
-                                $share->setPermissions(\OCP\Constants::PERMISSION_READ | \OCP\Constants::PERMISSION_SHARE);
+                                //$share->setPermissions(\OCP\Constants::PERMISSION_ALL | \OCP\Constants::PERMISSION_SHARE);
                                 $share->setExpirationDate(null);
                                 try {
                                     $share = $this->shareManager->createShare($share);
