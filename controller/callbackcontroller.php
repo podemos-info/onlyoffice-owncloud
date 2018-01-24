@@ -430,7 +430,7 @@ class CallbackController extends Controller {
                 }
                 $areInAnyWhere = False;
                 $userWhoOpenId = $userId;
-                foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
+                /*foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
                     $shareFile = $this->root->getUserFolder($sharedUser)->getById($file->getId());
                     $shareFile = $shareFile[0];
                     if (
@@ -492,7 +492,7 @@ continue;
                         }
                     }
                 }
-
+*/
                 $error = 0;
                 break;
             case "Closed":
