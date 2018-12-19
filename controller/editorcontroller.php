@@ -558,6 +558,7 @@ class EditorController extends Controller {
      */
     private function getFile($userId, $fileId) {
         if (empty($fileId)) {
+          error_log("fileId en editor controller: ".$fileId);
             return [NULL, $this->trans->t("FileId is empty")];
         }
 
@@ -623,6 +624,7 @@ class EditorController extends Controller {
      */
     private function getShare($token) {
         if (empty($token)) {
+          error_log("Token en editor controller: ".$fileId);
             return [NULL, $this->trans->t("FileId is empty")];
         }
 

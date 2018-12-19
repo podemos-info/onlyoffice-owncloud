@@ -44,19 +44,14 @@ use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
-<<<<<<< HEAD
 use OCP\AppFramework\OCS\OCSForbiddenException;
 use OCP\AppFramework\OCS\OCSException;
 use OCP\Share\Exceptions\GenericShareException;
-=======
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Share\IManager;
->>>>>>> upstream/master
-
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
 use OCA\Onlyoffice\DocumentService;
-use OCP\Share\IManager as IShareManager;
 
 /**
  * Callback handler for the document server.
@@ -85,13 +80,6 @@ class CallbackController extends Controller {
      * @var IUserManager
      */
     private $userManager;
-
-    /**
-     * Share manager
-     *
-     * @var IShareManager
-     */
-    private $shareManager;
 
     /**
      * l10n service
@@ -139,7 +127,7 @@ class CallbackController extends Controller {
         2 => "MustSave",
         3 => "Corrupted",
         4 => "Closed",
-	6 => "EditingSaved",
+	      6 => "EditingSaved",
     );
 
     /**
@@ -159,7 +147,6 @@ class CallbackController extends Controller {
                                     IRootFolder $root,
                                     IUserSession $userSession,
                                     IUserManager $userManager,
-                                    IShareManager $shareManager,
                                     IL10N $trans,
                                     ILogger $logger,
                                     AppConfig $config,
@@ -373,6 +360,7 @@ class CallbackController extends Controller {
             }
 
             $users = isset($payload->users) ? $payload->users : NULL;
+            error_log("users: ".print_r($users, true));
             $key = $payload->key;
             $status = $payload->status;
             $url = isset($payload->url) ? $payload->url : NULL;
@@ -422,6 +410,7 @@ class CallbackController extends Controller {
                     $file->getParent()->get(".~$".$file->getName())->delete();
                 }
                     $token = isset($hashData->token) ? $hashData->token : NULL;
+                    error_log("fileId: ".print_r($fileId, true));
                     list ($file, $error) = empty($token) ? $this->getFile($userId, $fileId) : $this->getFileByToken($fileId, $token);
 
                     if (isset($error)) {
@@ -471,105 +460,7 @@ class CallbackController extends Controller {
                 break;
 
             case "Editing":
-                $userId = $hashData->userId;
-                $files = $this->root->getUserFolder($userId)->getById($fileId);
-                if (empty($files)) {
-                    $this->logger->info("Files for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
-                }
-                $file = $files[0];
-
-                if (! $file instanceof File) {
-                    $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
-                }
-                $areInAnyWhere = False;
-                $userWhoOpenId = $userId;
-                /*foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-                    $shareFile = $this->root->getUserFolder($sharedUser)->getById($file->getId());
-                    $shareFile = $shareFile[0];
-                    if (
-                        $shareFile->getParent()->nodeExists(".~lock.".$file->getName()."#") ||
-                        $shareFile->getParent()->nodeExists(".~$".$file->getName())
-                    ) {
-                        $areInAnyWhere = True;
-                        $userWhoOpenId = $sharedUser;
-                    }
-                }
-                if (
-                    $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lock.".$file->getName()."#") ||
-                    $areInAnyWhere ||
-                    $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
-                ) {
-                    
-                    if (
-                        $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~lockonlyoffice.".$file->getName()."#") ||
-                        $this->root->getUserFolder($userWhoOpenId)->nodeExists(".~$".$file->getName())
-                    ) {
-                    } else {
-                        $error = 1;
-                        return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
-                        break;
-                    }
-                } else {
-                    $fileNodeLibreOffice = $file->copy($file->getParent()->getPath()."/.~lock.".$file->getName()."#");
-                    $fileNodeOnlyoffice = $file->copy($file->getParent()->getPath()."/.~lockonlyoffice.".$file->getName()."#");
-                    $fileNodePagaOffice = $file->copy($file->getParent()->getPath()."/.~$".$file->getName());
-                    foreach ($this->shareManager->getAccessList($file)['users'] as $key => $sharedUser) {
-                        if (
-                            $sharedUser != $userId &&
-                            $file->getParent()->getOwner()->getUID() != $sharedUser
-                        ) {
-                            foreach ([$fileNodeOnlyoffice, $fileNodeLibreOffice, $fileNodePagaOffice] as $shareFile) {
-                                if ($sharedUser == $userId) {
-                                    continue;
-                                }
-                                $share = $this->shareManager->newShare($file->getParent(), $this->userManager);
-                                $share->setNode($shareFile); // path del node con la ruta tipo /carpeta si hubera/nobrearchio.extesnions
-                                $share->setSharedWith($sharedUser);
-                                $share->setShareType(\OCP\Share::SHARE_TYPE_USER);
-                                $share->setSharedBy($userId);
-                                $share->setShareOwner($userId);
-                                $share->setPermissions(\OCP\Constants::PERMISSION_SHARE | \OCP\Constants::PERMISSION_READ);
-                                $share->setExpirationDate(null);
-                                try {
-                                    $share = $this->shareManager->createShare($share);
-                                } catch (GenericShareException $e) {
-                                    $code = $e->getCode() === 0 ? 403 : $e->getCode();
-continue;                                    
-//throw new OCSException($e->getHint(), $code);
-                                } catch (\Exception $e) {
-continue;                                    
-//throw new OCSForbiddenException($e->getMessage());
-                                }
-                            }
-
-                        }
-                    }
-                }
-*/
-                $error = 0;
-                break;
             case "Closed":
-                $userId = $hashData->userId;
-                $files = $this->root->getUserFolder($userId)->getById($fileId);
-                if (empty($files)) {
-                    $this->logger->info("Files for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
-                }
-                $file = $files[0];
-
-                if (! $file instanceof File) {
-                    $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
-                }
-                if (
-                    $file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")
-                ) {
-                    $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
-                    $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
-                    $file->getParent()->get(".~$".$file->getName())->delete();
-                }
                 $error = 0;
                 break;
         }
@@ -645,6 +536,7 @@ continue;
      * @return array
      */
     private function getShare($token) {
+      error_log("token: ".print_r($token, true));
         if (empty($token)) {
             return [NULL, new JSONResponse(["message" => $this->trans->t("FileId is empty")], Http::STATUS_BAD_REQUEST)];
         }
