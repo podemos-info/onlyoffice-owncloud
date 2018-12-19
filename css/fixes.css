@@ -5,3 +5,7 @@
 #content-wrapper{
 	padding-top: 0;
 }
+
+#content[class*='app-'] * {
+    width: 100%;
+}
