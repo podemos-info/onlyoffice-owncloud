@@ -1,26 +1,29 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System Limited 2010-2017
+ * (c) Copyright Ascensio System Limited 2010-2018
  *
- * This program is freeware. You can redistribute it and/or modify it under the terms of the GNU
- * General Public License (GPL) version 3 as published by the Free Software Foundation (https://www.gnu.org/copyleft/gpl.html).
- * In accordance with Section 7(a) of the GNU GPL its Section 15 shall be amended to the effect that
- * Ascensio System SIA expressly excludes the warranty of non-infringement of any third-party rights.
+ * This program is a free software product.
+ * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
+ * (AGPL) version 3 as published by the Free Software Foundation.
+ * In accordance with Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement of any third-party rights.
  *
- * THIS PROGRAM IS DISTRIBUTED WITHOUT ANY WARRANTY; WITHOUT EVEN THE IMPLIED WARRANTY OF MERCHANTABILITY OR
- * FITNESS FOR A PARTICULAR PURPOSE. For more details, see GNU GPL at https://www.gnu.org/copyleft/gpl.html
+ * This program is distributed WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * For details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA by email at sales@onlyoffice.com
+ * You can contact Ascensio System SIA at 17-2 Elijas street, Riga, Latvia, EU, LV-1021.
  *
- * The interactive user interfaces in modified source and object code versions of ONLYOFFICE must display
- * Appropriate Legal Notices, as required under Section 5 of the GNU GPL version 3.
+ * The interactive user interfaces in modified source and object code versions of the Program
+ * must display Appropriate Legal Notices, as required under Section 5 of the GNU AGPL version 3.
  *
- * Pursuant to Section 7 § 3(b) of the GNU GPL you must retain the original ONLYOFFICE logo which contains
- * relevant author attributions when distributing the software. If the display of the logo in its graphic
- * form is not reasonably feasible for technical reasons, you must include the words "Powered by ONLYOFFICE"
- * in every copy of the program you distribute.
- * Pursuant to Section 7 § 3(e) we decline to grant you any rights under trademark law for use of our trademarks.
+ * Pursuant to Section 7(b) of the License you must retain the original Product logo when distributing the program.
+ * Pursuant to Section 7(e) we decline to grant you any rights under trademark law for use of our trademarks.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as well as technical
+ * writing content are licensed under the terms of the Creative Commons Attribution-ShareAlike 4.0 International.
+ * See the License terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
  *
  */
 
@@ -30,16 +33,25 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Constants;
 use OCP\Files\File;
+use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
 use OCP\IL10N;
 use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
+<<<<<<< HEAD
 use OCP\AppFramework\OCS\OCSForbiddenException;
 use OCP\AppFramework\OCS\OCSException;
 use OCP\Share\Exceptions\GenericShareException;
+=======
+use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\IManager;
+>>>>>>> upstream/master
 
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
@@ -110,6 +122,13 @@ class CallbackController extends Controller {
     private $crypt;
 
     /**
+     * Share manager
+     *
+     * @var OCP\Share\IManager
+     */
+    private $shareManager;
+
+    /**
      * Status of the document
      *
      * @var Array
@@ -133,6 +152,7 @@ class CallbackController extends Controller {
      * @param ILogger $logger - logger
      * @param OCA\Onlyoffice\AppConfig $config - application configuration
      * @param OCA\Onlyoffice\Crypt $crypt - hash generator
+     * @param IManager $shareManager - Share manager
      */
     public function __construct($AppName, 
                                     IRequest $request,
@@ -143,7 +163,8 @@ class CallbackController extends Controller {
                                     IL10N $trans,
                                     ILogger $logger,
                                     AppConfig $config,
-                                    Crypt $crypt
+                                    Crypt $crypt,
+                                    IManager $shareManager
                                     ) {
         parent::__construct($AppName, $request);
 
@@ -155,6 +176,7 @@ class CallbackController extends Controller {
         $this->logger = $logger;
         $this->config = $config;
         $this->crypt = $crypt;
+        $this->shareManager = $shareManager;
     }
 
 
@@ -174,52 +196,58 @@ class CallbackController extends Controller {
 
         list ($hashData, $error) = $this->crypt->ReadHash($doc);
         if ($hashData === NULL) {
-            $this->logger->info("Download with empty or not correct hash: " . $error, array("app" => $this->appName));
+            $this->logger->error("Download with empty or not correct hash: " . $error, array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
         }
         if ($hashData->action !== "download") {
-            $this->logger->info("Download with other action", array("app" => $this->appName));
+            $this->logger->error("Download with other action", array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Invalid request")], Http::STATUS_BAD_REQUEST);
         }
 
         $fileId = $hashData->fileId;
         $this->logger->debug("Download: " . $fileId, array("app" => $this->appName));
 
-        if (!empty($this->config->GetDocumentServerSecret())) {
-            $header = \OC::$server->getRequest()->getHeader($this->config->JwtHeader());
-            if (empty($header)) {
-                $this->logger->info("Download without jwt", array("app" => $this->appName));
-                return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
-            }
+        if (!$this->userSession->isLoggedIn()) {
+            if (!empty($this->config->GetDocumentServerSecret())) {
+                $header = \OC::$server->getRequest()->getHeader($this->config->JwtHeader());
+                if (empty($header)) {
+                    $this->logger->error("Download without jwt", array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                }
 
-            $header = substr($header, strlen("Bearer "));
+                $header = substr($header, strlen("Bearer "));
 
-            try {
-                $decodedHeader = \Firebase\JWT\JWT::decode($header, $this->config->GetDocumentServerSecret(), array("HS256"));
-            } catch (\UnexpectedValueException $e) {
-                $this->logger->info("Download with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
-                return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                try {
+                    $decodedHeader = \Firebase\JWT\JWT::decode($header, $this->config->GetDocumentServerSecret(), array("HS256"));
+                } catch (\UnexpectedValueException $e) {
+                    $this->logger->error("Download with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                }
             }
         }
 
-        $userId = $hashData->userId;
-
-        $files = $this->root->getUserFolder($userId)->getById($fileId);
-        if (empty($files)) {
-            $this->logger->info("Files for download not found: " . $fileId, array("app" => $this->appName));
-            return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
+        if ($this->userSession->isLoggedIn()) {
+            $userId = $this->userSession->getUser()->getUID();
+        } else {
+            $userId = $hashData->userId;
         }
-        $file = $files[0];
 
-        if (! $file instanceof File) {
-            $this->logger->info("File for download not found: " . $fileId, array("app" => $this->appName));
-            return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
+        $token = isset($hashData->token) ? $hashData->token : NULL;
+        list ($file, $error) = empty($token) ? $this->getFile($userId, $fileId) : $this->getFileByToken($fileId, $token);
+
+        if (isset($error)) {
+            return $error;
+        }
+
+        if ($this->userSession->isLoggedIn() && !$file->isReadable()) {
+            $this->logger->error("Download without access right", array("app" => $this->appName));
+            return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
         }
 
         try {
             return new DataDownloadResponse($file->getContent(), $file->getName(), $file->getMimeType());
-        } catch (\OCP\Files\NotPermittedException  $e) {
-            $this->logger->info("Download Not permitted: " . $fileId . " " . $e->getMessage(), array("app" => $this->appName));
+        } catch (NotPermittedException  $e) {
+            $this->logger->error("Download Not permitted: " . $fileId . " " . $e->getMessage(), array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Not permitted")], Http::STATUS_FORBIDDEN);
         }
         return new JSONResponse(["message" => $this->trans->t("Download failed")], Http::STATUS_INTERNAL_SERVER_ERROR);
@@ -242,18 +270,18 @@ class CallbackController extends Controller {
 
         list ($hashData, $error) = $this->crypt->ReadHash($doc);
         if ($hashData === NULL) {
-            $this->logger->info("Download empty with empty or not correct hash: " . $error, array("app" => $this->appName));
+            $this->logger->error("Download empty with empty or not correct hash: " . $error, array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
         }
         if ($hashData->action !== "empty") {
-            $this->logger->info("Download empty with other action", array("app" => $this->appName));
+            $this->logger->error("Download empty with other action", array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Invalid request")], Http::STATUS_BAD_REQUEST);
         }
 
         if (!empty($this->config->GetDocumentServerSecret())) {
             $header = \OC::$server->getRequest()->getHeader($this->config->JwtHeader());
             if (empty($header)) {
-                $this->logger->info("Download empty without jwt", array("app" => $this->appName));
+                $this->logger->error("Download empty without jwt", array("app" => $this->appName));
                 return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
             }
 
@@ -262,7 +290,7 @@ class CallbackController extends Controller {
             try {
                 $decodedHeader = \Firebase\JWT\JWT::decode($header, $this->config->GetDocumentServerSecret(), array("HS256"));
             } catch (\UnexpectedValueException $e) {
-                $this->logger->info("Download empty with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
+                $this->logger->error("Download empty with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
                 return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
             }
         }
@@ -277,8 +305,8 @@ class CallbackController extends Controller {
 
         try {
             return new DataDownloadResponse($template, "new.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        } catch (\OCP\Files\NotPermittedException  $e) {
-            $this->logger->info("Download Not permitted: " . $fileId . " " . $e->getMessage(), array("app" => $this->appName));
+        } catch (NotPermittedException  $e) {
+            $this->logger->error("Download Not permitted: " . $fileId . " " . $e->getMessage(), array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Not permitted")], Http::STATUS_FORBIDDEN);
         }
         return new JSONResponse(["message" => $this->trans->t("Download failed")], Http::STATUS_INTERNAL_SERVER_ERROR);
@@ -290,7 +318,9 @@ class CallbackController extends Controller {
      * @param string $doc - verification token with the file identifier
      * @param array $users - the list of the identifiers of the users
      * @param string $key - the edited document identifier
+     * @param integer $status - the edited status
      * @param string $url - the link to the edited document to be saved
+     * @param string $token - access token
      *
      * @return array
      *
@@ -299,15 +329,15 @@ class CallbackController extends Controller {
      * @PublicPage
      * @CORS
      */
-    public function track($doc, $users, $key, $status, $url) {
+    public function track($doc, $users, $key, $status, $url, $token) {
 
         list ($hashData, $error) = $this->crypt->ReadHash($doc);
         if ($hashData === NULL) {
-            $this->logger->info("Track with empty or not correct hash: " . $error, array("app" => $this->appName));
+            $this->logger->error("Track with empty or not correct hash: " . $error, array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
         }
         if ($hashData->action !== "track") {
-            $this->logger->info("Track with other action", array("app" => $this->appName));
+            $this->logger->error("Track with other action", array("app" => $this->appName));
             return new JSONResponse(["message" => $this->trans->t("Invalid request")], Http::STATUS_BAD_REQUEST);
         }
 
@@ -315,27 +345,37 @@ class CallbackController extends Controller {
         $this->logger->debug("Track: " . $fileId . " status " . $status, array("app" => $this->appName));
 
         if (!empty($this->config->GetDocumentServerSecret())) {
-            $header = \OC::$server->getRequest()->getHeader($this->config->JwtHeader());
-            if (empty($header)) {
-                $this->logger->info("Track without jwt", array("app" => $this->appName));
-                return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+            if (!empty($token)) {
+                try {
+                    $payload = \Firebase\JWT\JWT::decode($token, $this->config->GetDocumentServerSecret(), array("HS256"));
+                } catch (\UnexpectedValueException $e) {
+                    $this->logger->error("Track with invalid jwt in body: " . $e->getMessage(), array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                }
+            } else {
+                $header = \OC::$server->getRequest()->getHeader($this->config->JwtHeader());
+                if (empty($header)) {
+                    $this->logger->error("Track without jwt", array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                }
+
+                $header = substr($header, strlen("Bearer "));
+
+                try {
+                    $decodedHeader = \Firebase\JWT\JWT::decode($header, $this->config->GetDocumentServerSecret(), array("HS256"));
+                    $this->logger->debug("Track HEADER : " . json_encode($decodedHeader), array("app" => $this->appName));
+
+                    $payload = $decodedHeader->payload;
+                } catch (\UnexpectedValueException $e) {
+                    $this->logger->error("Track with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
+                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
+                }
             }
 
-            $header = substr($header, strlen("Bearer "));
-
-            try {
-                $decodedHeader = \Firebase\JWT\JWT::decode($header, $this->config->GetDocumentServerSecret(), array("HS256"));
-                $this->logger->debug("Track HEADER : " . json_encode($decodedHeader), array("app" => $this->appName));
-
-                $payload = $decodedHeader->payload;
-                $users = isset($payload->users) ? $payload->users : NULL;
-                $key = $payload->key;
-                $status = $payload->status;
-                $url = isset($payload->url) ? $payload->url : NULL;
-            } catch (\UnexpectedValueException $e) {
-                $this->logger->info("Track with invalid jwt: " . $e->getMessage(), array("app" => $this->appName));
-                return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
-            }
+            $users = isset($payload->users) ? $payload->users : NULL;
+            $key = $payload->key;
+            $status = $payload->status;
+            $url = isset($payload->url) ? $payload->url : NULL;
         }
 
         $trackerStatus = $this->_trackerStatus[$status];
@@ -345,14 +385,26 @@ class CallbackController extends Controller {
             case "MustSave":
             case "Corrupted":
                 if (empty($url)) {
-                    $this->logger->info("Track without url: " . $fileId . " status " . $trackerStatus, array("app" => $this->appName));
+                    $this->logger->error("Track without url: " . $fileId . " status " . $trackerStatus, array("app" => $this->appName));
                     return new JSONResponse(["message" => $this->trans->t("Url not found")], Http::STATUS_BAD_REQUEST);
                 }
 
-                $userId = $hashData->userId;
+                try {
+                    $userId = $users[0];
+                    $user = $this->userManager->get($userId);
+                    if (!empty($user)) {
+                        \OC_Util::tearDownFS();
+                        \OC_Util::setupFS($userId);
 
-                \OC_Util::tearDownFS();
-                \OC_Util::setupFS($userId);
+                        $this->userSession->setUser($user);
+                    } else {
+                        $ownerId = $hashData->ownerId;
+
+                        \OC_Util::tearDownFS();
+                        if (!empty($ownerId)) {
+                            \OC_Util::setupFS($ownerId);
+                        }
+                    }
 
                 $files = $this->root->getUserFolder($userId)->getById($fileId);
                 if (empty($files)) {
@@ -369,49 +421,52 @@ class CallbackController extends Controller {
                     $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
                     $file->getParent()->get(".~$".$file->getName())->delete();
                 }
-                $fileName = $file->getName();
-                $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-                $downloadExt = strtolower(pathinfo($url, PATHINFO_EXTENSION));
+                    $token = isset($hashData->token) ? $hashData->token : NULL;
+                    list ($file, $error) = empty($token) ? $this->getFile($userId, $fileId) : $this->getFileByToken($fileId, $token);
 
-                $documentService = new DocumentService($this->trans, $this->config);
-                if ($downloadExt !== $curExt) {
-                    $key =  DocumentService::GenerateRevisionId($fileId . $url);
-
-                    try {
-                        $url = $documentService->GetConvertedUri($url, $downloadExt, $curExt, $key);
-                    } catch (\Exception $e) {
-                        $this->logger->error("GetConvertedUri on save error: " . $e->getMessage(), array("app" => $this->appName));
-                        return new JSONResponse(["message" => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
-                    }
-                }
-
-                $documentServerUrl = $this->config->GetDocumentServerInternalUrl(true);
-                if (!empty($documentServerUrl)) {
-                    $from = $this->config->GetDocumentServerUrl();
-
-                    if (!preg_match("/^https?:\/\//i", $from)) {
-                        $parsedUrl = parse_url($url);
-                        $from = $parsedUrl["scheme"] . "://" . $parsedUrl["host"] . (array_key_exists("port", $parsedUrl) ? (":" . $parsedUrl["port"]) : "") . "/";
+                    if (isset($error)) {
+                        return $error;
                     }
 
-                    if ($from !== $documentServerUrl)
-                    {
-                        $this->logger->debug("Replace in track from " . $from . " to " . $documentServerUrl, array("app" => $this->appName));
-                        $url = str_replace($from, $documentServerUrl, $url);
+                    $documentServerUrl = $this->config->GetDocumentServerInternalUrl(true);
+                    if (!empty($documentServerUrl)) {
+                        $from = $this->config->GetDocumentServerUrl();
+
+                        if (!preg_match("/^https?:\/\//i", $from)) {
+                            $parsedUrl = parse_url($url);
+                            $from = $parsedUrl["scheme"] . "://" . $parsedUrl["host"] . (array_key_exists("port", $parsedUrl) ? (":" . $parsedUrl["port"]) : "") . $from;
+                        }
+
+                        if ($from !== $documentServerUrl)
+                        {
+                            $this->logger->debug("Replace in track from " . $from . " to " . $documentServerUrl, array("app" => $this->appName));
+                            $url = str_replace($from, $documentServerUrl, $url);
+                        }
                     }
-                }
 
-                $this->userSession->setUser($this->userManager->get($users[0]));
+                    $fileName = $file->getName();
+                    $curExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                    $downloadExt = strtolower(pathinfo($url, PATHINFO_EXTENSION));
 
-                if (!$file->isUpdateable()) {
-                    $this->logger->error("Save error. File is not updateable: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("Access denied")], Http::STATUS_FORBIDDEN);
-                }
+                    $documentService = new DocumentService($this->trans, $this->config);
+                    if ($downloadExt !== $curExt) {
+                        $key =  DocumentService::GenerateRevisionId($fileId . $url);
 
-                if (($newData = $documentService->Request($url))) {
-                    $file->putContent($newData);
+                        try {
+                            $this->logger->debug("Converted from " . $downloadExt . " to " . $curExt, array("app" => $this->appName));
+                            $url = $documentService->GetConvertedUri($url, $downloadExt, $curExt, $key);
+                        } catch (\Exception $e) {
+                            $this->logger->error("Converted on save error: " . $e->getMessage(), array("app" => $this->appName));
+                            return new JSONResponse(["message" => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+                        }
+                    }
 
-                    $error = 0;
+                    if (($newData = $documentService->Request($url))) {
+                        $file->putContent($newData);
+                        $error = 0;
+                    }
+                } catch (\Exception $e) {
+                    $this->logger->error("Track " . $trackerStatus . " error: " . $e->getMessage(), array("app" => $this->appName));
                 }
                 break;
 
@@ -519,6 +574,93 @@ continue;
                 break;
         }
 
-        return new JSONResponse(["error" => $error], ($error === 0 ? Http::STATUS_OK : Http::STATUS_BAD_REQUEST));
+        return new JSONResponse(["error" => $error], Http::STATUS_OK);
+    }
+
+
+    /**
+     * Getting file by identifier
+     *
+     * @param string $userId - user identifier
+     * @param integer $fileId - file identifier
+     *
+     * @return array
+     */
+    private function getFile($userId, $fileId) {
+        if (empty($fileId)) {
+            return [NULL, new JSONResponse(["message" => $this->trans->t("FileId is empty")], Http::STATUS_BAD_REQUEST)];
+        }
+
+        $files = $this->root->getUserFolder($userId)->getById($fileId);
+        if (empty($files)) {
+            $this->logger->error("Files not found: " . $fileId, array("app" => $this->appName));
+            return [NULL, new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND)];
+        }
+        $file = $files[0];
+
+        if (!($file instanceof File)) {
+            $this->logger->error("File not found: " . $fileId, array("app" => $this->appName));
+            return [NULL, new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND)];
+        }
+
+        return [$file, NULL];
+    }
+
+    /**
+     * Getting file by token
+     *
+     * @param integer $fileId - file identifier
+     * @param string $token - access token
+     *
+     * @return array
+     */
+    private function getFileByToken($fileId, $token) {
+        list ($share, $error) = $this->getShare($token);
+
+        if (isset($error)) {
+            return [NULL, $error];
+        }
+
+        try {
+            $node = $share->getNode();
+        } catch (NotFoundException $e) {
+            $this->logger->error("getFileByToken error: " . $e->getMessage(), array("app" => $this->appName));
+            return [NULL, new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND)];
+        }
+
+        if ($node instanceof Folder) {
+            $file = $node->getById($fileId)[0];
+        } else {
+            $file = $node;
+        }
+
+        return [$file, NULL];
+    }
+
+    /**
+     * Getting share by token
+     *
+     * @param string $token - access token
+     *
+     * @return array
+     */
+    private function getShare($token) {
+        if (empty($token)) {
+            return [NULL, new JSONResponse(["message" => $this->trans->t("FileId is empty")], Http::STATUS_BAD_REQUEST)];
+        }
+
+        $share;
+        try {
+            $share = $this->shareManager->getShareByToken($token);
+        } catch (ShareNotFound $e) {
+            $this->logger->error("getShare error: " . $e->getMessage(), array("app" => $this->appName));
+            $share = NULL;
+        }
+
+        if ($share === NULL || $share === false) {
+            return [NULL, new JSONResponse(["message" => $this->trans->t("You do not have enough permissions to view the file")], Http::STATUS_FORBIDDEN)];
+        }
+
+        return [$share, NULL];
     }
 }

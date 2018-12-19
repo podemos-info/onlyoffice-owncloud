@@ -1,50 +1,56 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System Limited 2010-2017
+ * (c) Copyright Ascensio System Limited 2010-2018
  *
- * This program is freeware. You can redistribute it and/or modify it under the terms of the GNU
- * General Public License (GPL) version 3 as published by the Free Software Foundation (https://www.gnu.org/copyleft/gpl.html).
- * In accordance with Section 7(a) of the GNU GPL its Section 15 shall be amended to the effect that
- * Ascensio System SIA expressly excludes the warranty of non-infringement of any third-party rights.
+ * This program is a free software product.
+ * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
+ * (AGPL) version 3 as published by the Free Software Foundation.
+ * In accordance with Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+ * that Ascensio System SIA expressly excludes the warranty of non-infringement of any third-party rights.
  *
- * THIS PROGRAM IS DISTRIBUTED WITHOUT ANY WARRANTY; WITHOUT EVEN THE IMPLIED WARRANTY OF MERCHANTABILITY OR
- * FITNESS FOR A PARTICULAR PURPOSE. For more details, see GNU GPL at https://www.gnu.org/copyleft/gpl.html
+ * This program is distributed WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * For details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
  *
- * You can contact Ascensio System SIA by email at sales@onlyoffice.com
+ * You can contact Ascensio System SIA at 17-2 Elijas street, Riga, Latvia, EU, LV-1021.
  *
- * The interactive user interfaces in modified source and object code versions of ONLYOFFICE must display
- * Appropriate Legal Notices, as required under Section 5 of the GNU GPL version 3.
+ * The interactive user interfaces in modified source and object code versions of the Program
+ * must display Appropriate Legal Notices, as required under Section 5 of the GNU AGPL version 3.
  *
- * Pursuant to Section 7 § 3(b) of the GNU GPL you must retain the original ONLYOFFICE logo which contains
- * relevant author attributions when distributing the software. If the display of the logo in its graphic
- * form is not reasonably feasible for technical reasons, you must include the words "Powered by ONLYOFFICE"
- * in every copy of the program you distribute.
- * Pursuant to Section 7 § 3(e) we decline to grant you any rights under trademark law for use of our trademarks.
+ * Pursuant to Section 7(b) of the License you must retain the original Product logo when distributing the program.
+ * Pursuant to Section 7(e) we decline to grant you any rights under trademark law for use of our trademarks.
+ *
+ * All the Product's GUI elements, including illustrations and icon sets, as well as technical
+ * writing content are licensed under the terms of the Creative Commons Attribution-ShareAlike 4.0 International.
+ * See the License terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
  *
  */
 
 namespace OCA\Onlyoffice\Controller;
 
-use OCP\App;
-use OCP\AppFramework\Http\TemplateResponse;
-use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
+use OCP\AppFramework\Http\RedirectResponse;
+use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AutoloadNotAllowedException;
+use OCP\Constants;
 use OCP\Files\FileInfo;
+use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\NotFoundException;
 use OCP\IL10N;
 use OCP\ILogger;
 use OCP\IRequest;
+use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
+use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\IManager;
 
 use OC\Files\Filesystem;
-use OC\Files\View;
-use OC\User\NoUserException;
 
 use OCA\Files\Helper;
-use OCA\Files_Versions\Storage;
 
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
@@ -105,6 +111,20 @@ class EditorController extends Controller {
     private $crypt;
 
     /**
+     * Share manager
+     *
+     * @var IManager
+     */
+    private $shareManager;
+
+    /**
+     * Session
+     *
+     * @var ISession
+     */
+    private $session;
+
+    /**
      * Mobile regex from https://github.com/ONLYOFFICE/CommunityServer/blob/v9.1.1/web/studio/ASC.Web.Studio/web.appsettings.config#L35
      */
     const USER_AGENT_MOBILE = "/android|avantgo|playbook|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od|ad)|iris|kindle|lge |maemo|midp|mmp|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\\/|plucker|pocket|psp|symbian|treo|up\\.(browser|link)|vodafone|wap|windows (ce|phone)|xda|xiino/i";
@@ -119,6 +139,8 @@ class EditorController extends Controller {
      * @param ILogger $logger - logger
      * @param OCA\Onlyoffice\AppConfig $config - application configuration
      * @param OCA\Onlyoffice\Crypt $crypt - hash generator
+     * @param IManager $shareManager - Share manager
+     * @param IManager $ISession - Session
      */
     public function __construct($AppName,
                                     IRequest $request,
@@ -128,7 +150,9 @@ class EditorController extends Controller {
                                     IL10N $trans,
                                     ILogger $logger,
                                     AppConfig $config,
-                                    Crypt $crypt
+                                    Crypt $crypt,
+                                    IManager $shareManager,
+                                    ISession $session
                                     ) {
         parent::__construct($AppName, $request);
 
@@ -139,6 +163,8 @@ class EditorController extends Controller {
         $this->logger = $logger;
         $this->config = $config;
         $this->crypt = $crypt;
+        $this->shareManager = $shareManager;
+        $this->session = $session;
     }
 
     /**
@@ -154,16 +180,20 @@ class EditorController extends Controller {
     public function create($name, $dir) {
         $this->logger->debug("Create: " . $name, array("app" => $this->appName));
 
+        if (!$this->config->isUserAllowedToUse()) {
+            return ["error" => $this->trans->t("Not permitted")];
+        }
+
         $userId = $this->userSession->getUser()->getUID();
         $userFolder = $this->root->getUserFolder($userId);
         $folder = $userFolder->get($dir);
 
         if ($folder === NULL) {
-            $this->logger->info("Folder for file creation was not found: " . $dir, array("app" => $this->appName));
+            $this->logger->error("Folder for file creation was not found: " . $dir, array("app" => $this->appName));
             return ["error" => $this->trans->t("The required folder was not found")];
         }
         if (!$folder->isCreatable()) {
-            $this->logger->info("Folder for file creation without permission: " . $dir, array("app" => $this->appName));
+            $this->logger->error("Folder for file creation without permission: " . $dir, array("app" => $this->appName));
             return ["error" => $this->trans->t("You don't have enough permission to create")];
         }
 
@@ -181,7 +211,7 @@ class EditorController extends Controller {
 
         $template = file_get_contents($templatePath);
         if (!$template) {
-            $this->logger->info("Template for file creation not found: " . $templatePath, array("app" => $this->appName));
+            $this->logger->error("Template for file creation not found: " . $templatePath, array("app" => $this->appName));
             return ["error" => $this->trans->t("Template not found")];
         }
 
@@ -194,7 +224,7 @@ class EditorController extends Controller {
         $fileInfo = $view->getFileInfo($filePath);
 
         if ($fileInfo === false) {
-            $this->logger->info("File not found: " . $filePath, array("app" => $this->appName));
+            $this->logger->error("File not found: " . $filePath, array("app" => $this->appName));
             return ["error" => $this->trans->t("File not found")];
         }
 
@@ -202,6 +232,14 @@ class EditorController extends Controller {
         return $result;
     }
 
+    /**
+     * Get template path
+     *
+     * @param string $lang - language
+     * @param string $ext - file extension
+     *
+     * @return string
+     */
     private function getTemplatePath($lang, $ext) {
         return dirname(__DIR__) . DIRECTORY_SEPARATOR . "assets" . DIRECTORY_SEPARATOR . $lang . DIRECTORY_SEPARATOR . "new" . $ext;
     }
@@ -218,7 +256,12 @@ class EditorController extends Controller {
     public function convert($fileId) {
         $this->logger->debug("Convert: " . $fileId, array("app" => $this->appName));
 
-        list ($file, $error) = $this->getFile($fileId);
+        if (!$this->config->isUserAllowedToUse()) {
+            return ["error" => $this->trans->t("Not permitted")];
+        }
+
+        $userId = $this->userSession->getUser()->getUID();
+        list ($file, $error) = $this->getFile($userId, $fileId);
 
         if (isset($error)) {
             $this->logger->error("Convertion: " . $fileId . " " . $error, array("app" => $this->appName));
@@ -227,14 +270,14 @@ class EditorController extends Controller {
 
         $fileName = $file->getName();
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-        $format = $this->config->formats[$ext];
+        $format = $this->config->FormatsSetting()[$ext];
         if (!isset($format)) {
             $this->logger->info("Format for convertion not supported: " . $fileName, array("app" => $this->appName));
             return ["error" => $this->trans->t("Format is not supported")];
         }
 
-        if (!isset($format["conv"]) || $format["conv"] !== TRUE) {
-            $this->logger->debug("Conversion is not required: " . $fileName, array("app" => $this->appName));
+        if (!isset($format["conv"]) || $format["conv"] !== true) {
+            $this->logger->info("Conversion is not required: " . $fileName, array("app" => $this->appName));
             return ["error" => $this->trans->t("Conversion is not required")];
         }
 
@@ -251,7 +294,8 @@ class EditorController extends Controller {
         $newFileUri;
         $documentService = new DocumentService($this->trans, $this->config);
         $key = $this->getKey($file);
-        $fileUrl = $this->getUrl($file);
+        $fileId = $file->getId();
+        $fileUrl = $this->getUrl($fileId);
         try {
             $newFileUri = $documentService->GetConvertedUri($fileUrl, $ext, $internalExtension, $key);
         } catch (\Exception $e) {
@@ -259,7 +303,6 @@ class EditorController extends Controller {
             return ["error" => $e->getMessage()];
         }
 
-        $userId = $this->userSession->getUser()->getUID();
         $folder = $file->getParent();
         if (!$folder->isCreatable()) {
             $folder = $this->root->getUserFolder($userId);
@@ -272,7 +315,7 @@ class EditorController extends Controller {
 
         $newFilePath = $newFolderPath . DIRECTORY_SEPARATOR . $newFileName;
 
-        if (($newData = $documentService->Request($newFileUri)) === FALSE) {
+        if (($newData = $documentService->Request($newFileUri)) === false) {
             $this->logger->error("Failed to download converted file: " . $newFileUri, array("app" => $this->appName));
             return ["error" => $this->trans->t("Failed to download converted file")];
         }
@@ -298,25 +341,38 @@ class EditorController extends Controller {
      * Print editor section
      *
      * @param integer $fileId - file identifier
+     * @param string $token - access token
      *
-     * @return TemplateResponse
+     * @return TemplateResponse|RedirectResponse
      *
      * @NoAdminRequired
      * @NoCSRFRequired
      */
-    public function index($fileId) {
+    public function index($fileId, $token = NULL) {
         $this->logger->debug("Open: " . $fileId, array("app" => $this->appName));
+
+        if (empty($token) && !$this->userSession->isLoggedIn()) {
+            $redirectUrl = $this->urlGenerator->linkToRoute("core.login.showLoginForm", [
+                "redirect_url" => $this->request->getRequestUri()
+            ]);
+            return new RedirectResponse($redirectUrl);
+        }
+
+        if (empty($token) && !$this->config->isUserAllowedToUse()) {
+            return $this->renderError($this->trans->t("Not permitted"));
+        }
 
         $documentServerUrl = $this->config->GetDocumentServerUrl();
 
         if (empty($documentServerUrl)) {
             $this->logger->error("documentServerUrl is empty", array("app" => $this->appName));
-            return ["error" => $this->trans->t("ONLYOFFICE app is not configured. Please contact admin")];
+            return $this->renderError($this->trans->t("ONLYOFFICE app is not configured. Please contact admin"));
         }
 
         $params = [
             "documentServerUrl" => $documentServerUrl,
-            "fileId" => $fileId
+            "fileId" => $fileId,
+            "token" => $token
         ];
 
         $response = new TemplateResponse($this->appName, "editor", $params);
@@ -336,56 +392,63 @@ class EditorController extends Controller {
     }
 
     /**
+     * Print public editor section
+     *
+     * @param integer $fileId - file identifier
+     * @param string $token - access token
+     *
+     * @return TemplateResponse
+     *
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     * @PublicPage
+     */
+    public function PublicPage($fileId, $token) {
+        return $this->index($fileId, $token);
+    }
+
+    /**
      * Collecting the file parameters for the document service
      *
      * @param integer $fileId - file identifier
+     * @param string $token - access token
+     * @param bool $desktop - desktop label
      *
      * @return array
      *
      * @NoAdminRequired
+     * @PublicPage
      */
-    public function config($fileId) {
+    public function config($fileId, $token = NULL, $desktop = false) {
 
-        list ($file, $error) = $this->getFile($fileId);
+        if (empty($token) && !$this->config->isUserAllowedToUse()) {
+            return ["error" => $this->trans->t("Not permitted")];
+        }
+
+        $user = $this->userSession->getUser();
+        $userId = NULL;
+        if (!empty($user)) {
+            $userId = $user->getUID();
+        }
+
+        list ($file, $error, $share) = empty($token) ? $this->getFile($userId, $fileId) : $this->getFileByToken($fileId, $token);
 
         if (isset($error)) {
-            $this->logger->error("Convertion: " . $fileId . " " . $error, array("app" => $this->appName));
+            $this->logger->error("Config: " . $fileId . " " . $error, array("app" => $this->appName));
             return ["error" => $error];
         }
 
         $fileName = $file->getName();
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-        $format = $this->config->formats[$ext];
+        $format = $this->config->FormatsSetting()[$ext];
         if (!isset($format)) {
             $this->logger->info("Format is not supported for editing: " . $fileName, array("app" => $this->appName));
             return ["error" => $this->trans->t("Format is not supported")];
         }
 
-        $userId = $this->userSession->getUser()->getUID();
-        $userFolder = $this->root->getUserFolder($userId);
-        $folderPath = $userFolder->getRelativePath($file->getParent()->getPath());
-        $folderLink = $this->urlGenerator->linkToRouteAbsolute("files.view.index", [
-                "dir" => $folderPath,
-                "scrollto" => $file->getName()
-            ]);
-
-
         $fileId = $file->getId();
-        $hashCallback = $this->crypt->GetHash(["fileId" => $fileId, "userId" => $userId, "action" => "track"]);
-        $fileUrl = $this->getUrl($file);
+        $fileUrl = $this->getUrl($fileId, $token);
         $key = $this->getKey($file);
-
-        $canEdit = isset($format["edit"]) && $format["edit"];
-        $callback = ($file->isUpdateable() && $canEdit ? $this->urlGenerator->linkToRouteAbsolute($this->appName . ".callback.track", ["doc" => $hashCallback]) : "");
-
-        if (!empty($this->config->GetStorageUrl())) {
-            $callback = str_replace($this->urlGenerator->getAbsoluteURL("/"), $this->config->GetStorageUrl(), $callback);
-        }
-
-        $type = "desktop";
-        if (\OC::$server->getRequest()->isUserAgent([$this::USER_AGENT_MOBILE])) {
-            $type = "mobile";
-        }
 
         $params = [
             "document" => [
@@ -396,22 +459,84 @@ class EditorController extends Controller {
             ],
             "documentType" => $format["type"],
             "editorConfig" => [
-                "callbackUrl" => $callback,
-		        "forcesave" => True, //No parece funcionar
-                "customization" => [
-                    "goback" => [
-                        "url" => ''
-                    ]
-                ],
-                "lang" => str_replace("_", "-", \OC::$server->getL10NFactory("")->get("")->getLanguageCode()),
-                "mode" => (empty($callback) ? "view" : "edit"),
-                "user" => [
-                    "id" => $userId,
-                    "name" => $this->userSession->getUser()->getDisplayName()
-                ]
-            ],
-            "type" => $type
+                "lang" => str_replace("_", "-", \OC::$server->getL10NFactory("")->get("")->getLanguageCode())
+            ]
         ];
+
+        if (\OC::$server->getRequest()->isUserAgent([$this::USER_AGENT_MOBILE])) {
+            $params["type"] = "mobile";
+        }
+
+        $canEdit = isset($format["edit"]) && $format["edit"];
+        $editable = $file->isUpdateable()
+                    && (empty($token) || ($share->getPermissions() & Constants::PERMISSION_UPDATE) === Constants::PERMISSION_UPDATE);
+        if ($editable && $canEdit) {
+            $ownerId = NULL;
+            $owner = $file->getOwner();
+            if (!empty($owner)) {
+                $ownerId = $owner->getUID();
+            }
+
+            $hashCallback = $this->crypt->GetHash(["fileId" => $fileId, "ownerId" => $ownerId, "token" => $token, "action" => "track"]);
+            $callback = $this->urlGenerator->linkToRouteAbsolute($this->appName . ".callback.track", ["doc" => $hashCallback]);
+
+            if (!empty($this->config->GetStorageUrl())) {
+                $callback = str_replace($this->urlGenerator->getAbsoluteURL("/"), $this->config->GetStorageUrl(), $callback);
+            }
+
+            $params["editorConfig"]["callbackUrl"] = $callback;
+        } else {
+            $params["editorConfig"]["mode"] = "view";
+        }
+
+        if (!empty($userId)) {
+            $params["editorConfig"]["user"] = [
+                "id" => $userId,
+                "name" => $user->getDisplayName()
+            ];
+        }
+
+        $folderLink = NULL;
+
+        if (!empty($token)) {
+            $node = $share->getNode();
+            if ($node instanceof Folder) {
+                $sharedFolder = $node;
+                $folderPath = $sharedFolder->getRelativePath($file->getParent()->getPath());
+                if (!empty($folderPath)) {
+                    $linkAttr = [
+                        "path" => $folderPath,
+                        "scrollto" => $file->getName(),
+                        "token" => $token
+                    ];
+                    $folderLink = $this->urlGenerator->linkToRouteAbsolute("files_sharing.sharecontroller.showShare", $linkAttr);
+                }
+            }
+        } else if (!empty($userId)) {
+            $userFolder = $this->root->getUserFolder($userId);
+            $folderPath = $userFolder->getRelativePath($file->getParent()->getPath());
+            if (!empty($folderPath)) {
+                $linkAttr = [
+                    "dir" => $folderPath,
+                    "scrollto" => $file->getName()
+                ];
+                $folderLink = $this->urlGenerator->linkToRouteAbsolute("files.view.index", $linkAttr);
+            }
+        }
+
+        if ($folderLink !== NULL) {
+            $params["editorConfig"]["customization"]["goback"] = [
+                "url"  => $folderLink
+            ];
+
+            if (!$desktop) {
+                if ($this->config->GetSameTab()) {
+                    $params["editorConfig"]["customization"]["goback"]["blank"] = false;
+                }
+            }
+        }
+
+        $params = $this->setCustomization($params);
 
         if (!empty($this->config->GetDocumentServerSecret())) {
             $token = \Firebase\JWT\JWT::encode($params, $this->config->GetDocumentServerSecret());
@@ -426,16 +551,23 @@ class EditorController extends Controller {
     /**
      * Getting file by identifier
      *
+     * @param string $userId - user identifier
      * @param integer $fileId - file identifier
      *
      * @return array
      */
-    private function getFile($fileId) {
+    private function getFile($userId, $fileId) {
         if (empty($fileId)) {
             return [NULL, $this->trans->t("FileId is empty")];
         }
 
-        $files = $this->root->getById($fileId);
+        if ($userId !== NULL) {
+            $files = $this->root->getUserFolder($userId)->getById($fileId);
+        } else {
+            $this->logger->debug("getFile by unknown user: " . $fileId, array("app" => $this->appName));
+            $files = $this->root->getById($fileId);
+        }
+
         if (empty($files)) {
             return [NULL, $this->trans->t("File not found")];
         }
@@ -448,35 +580,86 @@ class EditorController extends Controller {
     }
 
     /**
+     * Getting file by token
+     *
+     * @param integer $fileId - file identifier
+     * @param string $token - access token
+     *
+     * @return array
+     */
+    private function getFileByToken($fileId, $token) {
+        list ($share, $error) = $this->getShare($token);
+
+        if (isset($error)) {
+            return [NULL, $error];
+        }
+
+        if (($share->getPermissions() & Constants::PERMISSION_READ) === 0) {
+            return [NULL, $this->trans->t("You do not have enough permissions to view the file")];
+        }
+
+        try {
+            $node = $share->getNode();
+        } catch (NotFoundException $e) {
+            $this->logger->error("getFileByToken error: " . $e->getMessage(), array("app" => $this->appName));
+            return [NULL, $this->trans->t("File not found")];
+        }
+
+        if ($node instanceof Folder) {
+            $file = $node->getById($fileId)[0];
+        } else {
+            $file = $node;
+        }
+
+        return [$file, NULL, $share];
+    }
+
+    /**
+     * Getting share by token
+     *
+     * @param string $token - access token
+     *
+     * @return array
+     */
+    private function getShare($token) {
+        if (empty($token)) {
+            return [NULL, $this->trans->t("FileId is empty")];
+        }
+
+        $share;
+        try {
+            $share = $this->shareManager->getShareByToken($token);
+        } catch (ShareNotFound $e) {
+            $this->logger->error("getShare error: " . $e->getMessage(), array("app" => $this->appName));
+            $share = NULL;
+        }
+
+        if ($share === NULL || $share === false) {
+            return [NULL, $this->trans->t("You do not have enough permissions to view the file")];
+        }
+
+        if ($share->getPassword() 
+            && (!$this->session->exists("public_link_authenticated")
+                || $this->session->get("public_link_authenticated") !== (string) $share->getId())) {
+            return [NULL, $this->trans->t("You do not have enough permissions to view the file")];
+        }
+
+        return [$share, NULL];
+    }
+
+    /**
      * Generate unique document identifier
      *
-     * @param \OCP\Files\File - file
+     * @param File $file - file
      *
      * @return string
      */
     private function getKey($file) {
+        $instanceId = $this->config->getSystemValue("instanceid", true);
+
         $fileId = $file->getId();
 
-        $key = $fileId . "_" . $file->getMtime();
-
-        $ownerId = $file->getOwner()->getUID();
-        try {
-            $this->root->getUserFolder($ownerId);
-        } catch (NoUserException $e) {
-            $ownerId = $this->userSession->getUser()->getUID();
-        }
-
-        $ownerView = new View("/" . $ownerId . "/files");
-        $filePath = $ownerView->getPath($fileId);
-        $versions = [];
-        if (App::isEnabled("files_versions")) {
-            $versions = Storage::getVersions($ownerId, $filePath);
-        }
-
-        $countVersions = count($versions);
-        if ($countVersions > 0) {
-            $key = $key . "_" . $countVersions;
-        }
+        $key = $instanceId . "_" . $fileId . "_" . $file->getMtime();
 
         return $key;
     }
@@ -484,16 +667,20 @@ class EditorController extends Controller {
     /**
      * Generate secure link to download document
      *
-     * @param \OCP\Files\File - file
+     * @param integer $fileId - file identifier
+     * @param string $token - access token
      *
      * @return string
      */
-    private function getUrl($file) {
-        $fileId = $file->getId();
+    private function getUrl($fileId, $token = NULL) {
 
-        $userId = $this->userSession->getUser()->getUID();
+        $user = $this->userSession->getUser();
+        $userId = NULL;
+        if (!empty($user)) {
+            $userId = $user->getUID();
+        }
 
-        $hashUrl = $this->crypt->GetHash(["fileId" => $fileId, "userId" => $userId, "action" => "download"]);
+        $hashUrl = $this->crypt->GetHash(["fileId" => $fileId, "userId" => $userId, "token" => $token, "action" => "download"]);
 
         $fileUrl = $this->urlGenerator->linkToRouteAbsolute($this->appName . ".callback.download", ["doc" => $hashUrl]);
 
@@ -502,5 +689,58 @@ class EditorController extends Controller {
         }
 
         return $fileUrl;
+    }
+
+    /**
+     * Set customization parameters
+     *
+     * @param array params - file parameters
+     *
+     * @return array
+     */
+    private function setCustomization($params) {
+        $customer = $this->config->getSystemValue($this->config->_customization_customer);
+        if (isset($customer)) {
+            $params["editorConfig"]["customization"]["customer"] = $customer;
+        }
+
+        $feedback = $this->config->getSystemValue($this->config->_customization_feedback);
+        if (isset($feedback)) {
+            $params["editorConfig"]["customization"]["feedback"] = $feedback;
+        }
+
+        $loaderLogo = $this->config->getSystemValue($this->config->_customization_loaderLogo);
+        if (isset($loaderLogo)) {
+            $params["editorConfig"]["customization"]["loaderLogo"] = $loaderLogo;
+        }
+
+        $loaderName = $this->config->getSystemValue($this->config->_customization_loaderName);
+        if (isset($loaderName)) {
+            $params["editorConfig"]["customization"]["loaderName"] = $loaderName;
+        }
+
+        $logo = $this->config->getSystemValue($this->config->_customization_logo);
+        if (isset($logo)) {
+            $params["editorConfig"]["customization"]["logo"] = $logo;
+        }
+
+        return $params;
+    }
+
+    /**
+     * Print error page
+     *
+     * @param string $error - error message
+     * @param string $hint - error hint
+     *
+     * @return TemplateResponse
+     */
+    private function renderError($error, $hint = "") {
+        return new TemplateResponse("", "error", array(
+                "errors" => array(array(
+                "error" => $error,
+                "hint" => $hint
+            ))
+        ), "error");
     }
 }

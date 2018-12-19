@@ -1,4 +1,3 @@
-<?php
 /**
  *
  * (c) Copyright Ascensio System Limited 2010-2018
@@ -27,60 +26,26 @@
  *
  */
 
-namespace OCA\Onlyoffice;
+(function (OCA) {
 
-use OCA\Onlyoffice\AppConfig;
+    OCA.Onlyoffice = _.extend({}, OCA.Onlyoffice);
 
-/**
- * Token generator
- *
- * @package OCA\Onlyoffice
- */
-class Crypt {
-
-    /**
-     * The secret key from the application configuration
-     *
-     * @var string
-     */
-    private $skey;
-
-    /**
-     * @param OCA\Onlyoffice\AppConfig $config - application configutarion
-     */
-    public function __construct(AppConfig $appConfig) {
-        $this->skey = $appConfig->GetSKey();
+    if (!window["AscDesktopEditor"]) {
+        return;
     }
 
-    /**
-     * Generate token for the object
-     *
-     * @param array $object - object to signature
-     *
-     * @return string
-     */
-    public function GetHash($object) {
-        return \Firebase\JWT\JWT::encode($object, $this->skey);
-    }
+    OCA.Onlyoffice.Desktop = true;
+    $("html").addClass("AscDesktopEditor");
 
-    /**
-     * Create an object from the token
-     *
-     * @param string $token - token
-     *
-     * @return array
-     */
-    public function ReadHash($token) {
-        $result = NULL;
-        $error = NULL;
-        if ($token === NULL) {
-            return [$result, "token is empty"];
-        }
-        try {
-            $result = \Firebase\JWT\JWT::decode($token, $this->skey, array("HS256"));
-        } catch (\UnexpectedValueException $e) {
-            $error = $e->getMessage();
-        }
-        return [$result, $error];
-    }
-}
+    var domain = location.href.split(OC.generateUrl(""))[0];
+
+    var data = {
+        displayName: oc_user.displayName,
+        domain: domain,
+        email: oc_user.email,
+        provider: "ownCloud",
+    };
+
+    window.AscDesktopEditor.execCommand("portal:login", JSON.stringify(data));
+
+})(OCA);

@@ -1,5 +1,58 @@
 # Change Log
 
+## 2.1.3
+## Added
+- restricting access for groups
+- goback from editor to shared folder by link
+
+## Changed
+- using notification methods
+
+## 2.1.1
+## Added
+- Swedish translation
+- support token in the body
+- desktop mode
+
+## Changed
+- fix opening shared file by registered user
+- fix translations
+
+## 2.0.3
+## Added
+- opening for editing not OOXML
+
+## Changed
+- different keys for a file from different instances
+- replace hash generator to JWT
+
+## 2.0.1
+## Changed
+- deleted unsupported methods
+
+## 1.4.0
+## Added
+- transition from the editor to the list of files in the same tab
+- default action for all supported formats
+- redirect to the login page if are not logged in
+- a separate action to call the file conversion
+
+## Changed
+- improved checks when saving connection settings
+- expanded the list of formats
+- fixed exceptions when opening file shared by link
+
+## 1.3.0
+## Added
+- add macro-enabled and template formats
+- support shared link for document
+- customization editor
+
+## Changed
+- update template empty files
+- fix collaboration editing
+- view without converting
+
 ## 1.2.0
 ## Added
 - disabling for incorrect settings
