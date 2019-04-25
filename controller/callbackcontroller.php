@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System Limited 2010-2018
+ * (c) Copyright Ascensio System SIA 2019
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -450,10 +450,9 @@ class CallbackController extends Controller {
                         }
                     }
 
-                    if (($newData = $documentService->Request($url))) {
-                        $file->putContent($newData);
-                        $error = 0;
-                    }
+                    $newData = $documentService->Request($url);
+                    $file->putContent($newData);
+                    $error = 0;
                 } catch (\Exception $e) {
                     $this->logger->error("Track " . $trackerStatus . " error: " . $e->getMessage(), array("app" => $this->appName));
                 }
@@ -464,6 +463,8 @@ class CallbackController extends Controller {
                 $error = 0;
                 break;
         }
+
+        $this->logger->debug("Track: " . $fileId . " status " . $status . " result " . $error, array("app" => $this->appName));
 
         return new JSONResponse(["error" => $error], Http::STATUS_OK);
     }
@@ -483,6 +484,7 @@ class CallbackController extends Controller {
         }
 
         $files = $this->root->getUserFolder($userId)->getById($fileId);
+
         if (empty($files)) {
             $this->logger->error("Files not found: " . $fileId, array("app" => $this->appName));
             return [NULL, new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND)];
@@ -520,7 +522,12 @@ class CallbackController extends Controller {
         }
 
         if ($node instanceof Folder) {
-            $file = $node->getById($fileId)[0];
+            $files = $node->getById($fileId);
+
+            if (empty($files)) {
+                return [NULL, new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND)];
+            }
+            $file = $files[0];
         } else {
             $file = $node;
         }
