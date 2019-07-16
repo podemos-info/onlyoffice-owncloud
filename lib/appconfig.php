@@ -110,6 +110,41 @@ class AppConfig {
     private $_sameTab = "sameTab";
 
     /**
+     * The config key for the chat display setting
+     *
+     * @var string
+     */
+    private $_customizationChat = "customizationChat";
+
+    /**
+     * The config key for display the header more compact setting
+     *
+     * @var string
+     */
+    private $_customizationCompactHeader = "customizationCompactHeader";
+
+    /**
+     * The config key for the feedback display setting
+     *
+     * @var string
+     */
+    private $_customizationFeedback = "customizationFeedback";
+
+    /**
+     * The config key for the help display setting
+     *
+     * @var string
+     */
+    private $_customizationHelp = "customizationHelp";
+
+    /**
+     * The config key for the no tabs setting
+     *
+     * @var string
+     */
+    private $_customizationToolbarNoTabs = "customizationToolbarNoTabs";
+
+    /**
      * The config key for the setting limit groups
      *
      * @var string
@@ -143,13 +178,6 @@ class AppConfig {
      * @var string
      */
     private $_settingsError = "settings_error";
-
-    /**
-     * The config key for the modifyFilter
-     *
-     * @var string
-     */
-    public $_permissions_modifyFilter = "permissions_modifyFilter";
 
     /**
      * The config key for the customer
@@ -431,6 +459,106 @@ class AppConfig {
     }
 
     /**
+     * Save chat display setting
+     *
+     * @param bool $value - display chat
+     */
+    public function SetCustomizationChat($value) {
+        $this->logger->info("Set chat display: " . json_encode($value), array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_customizationChat, json_encode($value));
+    }
+
+    /**
+     * Get chat display setting
+     *
+     * @return bool
+     */
+    public function GetCustomizationChat() {
+        return $this->config->getAppValue($this->appName, $this->_customizationChat, "true") === "true";
+    }
+
+    /**
+     * Save compact header setting
+     *
+     * @param bool $value - display compact header
+     */
+    public function SetCustomizationCompactHeader($value) {
+        $this->logger->info("Set compact header display: " . json_encode($value), array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_customizationCompactHeader, json_encode($value));
+    }
+
+    /**
+     * Get compact header setting
+     *
+     * @return bool
+     */
+    public function GetCustomizationCompactHeader() {
+        return $this->config->getAppValue($this->appName, $this->_customizationCompactHeader, "true") === "true";
+    }
+
+    /**
+     * Save feedback display setting
+     *
+     * @param bool $value - display feedback
+     */
+    public function SetCustomizationFeedback($value) {
+        $this->logger->info("Set feedback display: " . json_encode($value), array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_customizationFeedback, json_encode($value));
+    }
+
+    /**
+     * Get feedback display setting
+     *
+     * @return bool
+     */
+    public function GetCustomizationFeedback() {
+        return $this->config->getAppValue($this->appName, $this->_customizationFeedback, "true") === "true";
+    }
+
+    /**
+     * Save help display setting
+     *
+     * @param bool $value - display help
+     */
+    public function SetCustomizationHelp($value) {
+        $this->logger->info("Set help display: " . json_encode($value), array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_customizationHelp, json_encode($value));
+    }
+
+    /**
+     * Get help display setting
+     *
+     * @return bool
+     */
+    public function GetCustomizationHelp() {
+        return $this->config->getAppValue($this->appName, $this->_customizationHelp, "true") === "true";
+    }
+
+    /**
+     * Save without tabs setting
+     *
+     * @param bool $value - without tabs
+     */
+    public function SetCustomizationToolbarNoTabs($value) {
+        $this->logger->info("Set without tabs: " . json_encode($value), array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_customizationToolbarNoTabs, json_encode($value));
+    }
+
+    /**
+     * Get without tabs setting
+     *
+     * @return bool
+     */
+    public function GetCustomizationToolbarNoTabs() {
+        return $this->config->getAppValue($this->appName, $this->_customizationToolbarNoTabs, "true") === "true";
+    }
+
+    /**
      * Save the list of groups
      *
      * @param array $groups - the list of groups
@@ -539,6 +667,28 @@ class AppConfig {
     }
 
     /**
+     * Checking encryption enabled
+     *
+     * @return string|bool
+    */
+    public function checkEncryptionModule() {
+        if (!\OC::$server->getAppManager()->isInstalled("encryption")) {
+            return false;
+        }
+        if (!\OC::$server->getEncryptionManager()->isEnabled()) {
+            return false;
+        }
+
+        $crypt = new \OCA\Encryption\Crypto\Crypt(\OC::$server->getLogger(), \OC::$server->getUserSession(), \OC::$server->getConfig(), \OC::$server->getL10N("encryption"));
+        $util = new \OCA\Encryption\Util(new \OC\Files\View(), $crypt, \OC::$server->getLogger(), \OC::$server->getUserSession(), \OC::$server->getConfig(), \OC::$server->getUserManager());
+        if ($util->isMasterKeyEnabled()) {
+            return "master";
+        }
+
+        return true;
+    }
+
+    /**
      * Get supported formats
      *
      * @return array
@@ -575,7 +725,8 @@ class AppConfig {
         "csv" => [ "mime" => "text/csv", "type" => "spreadsheet", "edit" => true, "editable" => true ],
         "doc" => [ "mime" => "application/msword", "type" => "text", "conv" => true ],
         "docm" => [ "mime" => "application/vnd.ms-word.document.macroEnabled.12", "type" => "text", "conv" => true ],
-        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true ],
+        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true, "review" => true, "fillForms" => true ],
+        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true, "review" => true, "fillForms" => true, "comment" => true ],
         "dot" => [ "type" => "text", "conv" => true ],
         "dotx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.template", "type" => "text", "conv" => true ],
         "epub" => [ "mime" => "application/epub+zip", "type" => "text", "conv" => true ],
@@ -593,12 +744,12 @@ class AppConfig {
         "ppsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.slideshow", "type" => "presentation", "conv" => true ],
         "ppt" => [ "mime" => "application/vnd.ms-powerpoint", "type" => "presentation", "conv" => true ],
         "pptm" => [ "mime" => "application/vnd.ms-powerpoint.presentation.macroEnabled.12", "type" => "presentation", "conv" => true ],
-        "pptx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.presentation", "type" => "presentation", "edit" => true, "def" => true ],
+        "pptx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.presentation", "type" => "presentation", "edit" => true, "def" => true, "comment" => true ],
         "rtf" => [ "mime" => "text/rtf", "type" => "text", "conv" => true, "editable" => true ],
         "txt" => [ "mime" => "text/plain", "type" => "text", "edit" => true, "editable" => true ],
         "xls" => [ "mime" => "application/vnd.ms-excel", "type" => "spreadsheet", "conv" => true ],
         "xlsm" => [ "mime" => "application/vnd.ms-excel.sheet.macroEnabled.12", "type" => "spreadsheet", "conv" => true ],
-        "xlsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "type" => "spreadsheet", "edit" => true, "def" => true ],
+        "xlsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "type" => "spreadsheet", "edit" => true, "def" => true, "comment" => true, "modifyFilter" => true ],
         "xlt" => [ "type" => "spreadsheet", "conv" => true ],
         "xltm" => [ "mime" => "application/vnd.ms-excel.template.macroEnabled.12", "type" => "spreadsheet", "conv" => true ],
         "xltx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.template", "type" => "spreadsheet", "conv" => true ]
