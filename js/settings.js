@@ -41,9 +41,12 @@
             $("#onlyofficeAdv .icon").toggleClass("icon-triangle-s icon-triangle-n");
         };
 
-        if ($("#onlyofficeInternalUrl").val().length
-            || $("#onlyofficeStorageUrl").val().length) {
-            advToogle();
+	// comprobar primero que el id onlyofficeInternalUrl existe en el doom ya que en la version 16 de nextcloud falla al no existir dicho id
+        if (typeof $("#onlyofficeInternalUrl").val() !== 'undefined'){
+	    if ($("#onlyofficeInternalUrl").val().length
+                || $("#onlyofficeStorageUrl").val().length) {
+                advToogle();
+            }
         }
 
         $("#onlyofficeAdv").click(function () {
