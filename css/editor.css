@@ -26,14 +26,18 @@
  *
  */
 
+#content.app-onlyoffice {
+    min-height: calc(100% - 50px);
+}
 #app > iframe {
     position: absolute;
     vertical-align: top;
 }
 
-.AscDesktopEditor #header {
+.AscDesktopEditor #body-user #header {
     display: none;
 }
-.AscDesktopEditor #content-wrapper {
+.AscDesktopEditor #body-user #content {
+    min-height: 100%;
     padding-top: 0;
 }

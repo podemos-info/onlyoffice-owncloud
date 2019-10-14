@@ -40,15 +40,22 @@
     background-image: url("../img/app-dark.svg");
 }
 
-.AscDesktopEditor #header {
+.AscDesktopEditor #body-user #header {
     display: none;
 }
-.AscDesktopEditor #content-wrapper {
+.AscDesktopEditor #body-user #content {
     padding-top: 0;
 }
-.AscDesktopEditor #controls,
-.AscDesktopEditor #app-sidebar {
+.AscDesktopEditor #body-user #app-navigation,
+.AscDesktopEditor #body-user #controls,
+.AscDesktopEditor #body-user #app-sidebar {
     top: 0;
+}
+.AscDesktopEditor #body-user #app-navigation {
+    height: 100%;
+}
+.AscDesktopEditor #body-user #app-sidebar {
+    height: 100vh;
 }
 .AscDesktopEditor #body-user table.multiselect thead {
     top: 44px;

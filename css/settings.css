@@ -26,11 +26,9 @@
  *
  */
 
-#content .section-onlyoffice h2 .icon-info {
-    padding-top: 17px;
-}
-.onlyoffice-error {
-    color: red;
+ #content .section-onlyoffice .icon-info {
+    box-sizing: content-box;
+    padding-top: 6px;
 }
 .onlyoffice-header {
     display: inline-block;
@@ -57,8 +55,14 @@
 .onlyoffice-demo {
     margin-left: 90px;
 }
-#s2id_onlyofficeLimitGroups {
+#s2id_onlyofficeLimitGroups,
+#s2id_onlyofficeWatermark_allGroupsList,
+#s2id_onlyofficeWatermark_allTagsList,
+#s2id_onlyofficeWatermark_linkTagsList {
     margin-bottom: 16px;
+    margin-left: 18px;
+    margin-top: 6px;
+    width: 250px;
 }
 .onlyoffice-exts {
     column-width: 100px;

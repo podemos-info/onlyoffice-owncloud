@@ -375,7 +375,6 @@ class EditorController extends Controller {
      * @return array
      *
      * @NoAdminRequired
-     * @PublicPage
      */
     public function save($name, $dir, $url) {
         $this->logger->debug("Save: " . $name, array("app" => $this->appName));
@@ -599,61 +598,21 @@ class EditorController extends Controller {
             ],
             "documentType" => $format["type"],
             "editorConfig" => [
-                "lang" => str_replace("_", "-", $this->trans->getLanguageCode())
+                "lang" => str_replace("_", "-", $this->trans->getLanguageCode()),
+                "region" => str_replace("_", "-", \OC::$server->getL10NFactory("")->findLocale())
             ]
         ];
 
-        $restrictedEditing = false;
-        $fileStorage = $file->getStorage();
-        if (empty($token) && $fileStorage->instanceOfStorage("\OCA\Files_Sharing\SharedStorage")) {
-            $storageShare = $fileStorage->getShare();
-            if (method_exists($storageShare, "getAttributes"))
-            {
-                $attributes = $storageShare->getAttributes();
-
-                $permissionsDownload = $attributes->getAttribute("permissions", "download");
-                if ($permissionsDownload !== null) {
-                    $params["document"]["permissions"]["download"] = $params["document"]["permissions"]["print"] = $permissionsDownload === true;
-                }
-
-                if (isset($format["review"]) && $format["review"]) {
-                    $permissionsReviewOnly = $attributes->getAttribute($this->appName, "review");
-                    if ($permissionsReviewOnly !== null && $permissionsReviewOnly === true) {
-                        $restrictedEditing = true;
-                        $params["document"]["permissions"]["review"] = true;
-                    }
-                }
-
-                if (isset($format["fillForms"]) && $format["fillForms"]) {
-                    $permissionsFillFormsOnly = $attributes->getAttribute($this->appName, "fillForms");
-                    if ($permissionsFillFormsOnly !== null && $permissionsFillFormsOnly === true) {
-                        $restrictedEditing = true;
-                        $params["document"]["permissions"]["fillForms"] = true;
-                    }
-                }
-
-                if (isset($format["comment"]) && $format["comment"]) {
-                    $permissionsCommentOnly = $attributes->getAttribute($this->appName, "comment");
-                    if ($permissionsCommentOnly !== null && $permissionsCommentOnly === true) {
-                        $restrictedEditing = true;
-                        $params["document"]["permissions"]["comment"] = true;
-                    }
-                }
-
-                if (isset($format["modifyFilter"]) && $format["modifyFilter"]) {
-                    $permissionsModifyFilter = $attributes->getAttribute($this->appName, "modifyFilter");
-                    if ($permissionsModifyFilter !== null) {
-                        $params["document"]["permissions"]["modifyFilter"] = $permissionsModifyFilter === true;
-                    }
-                }
-            }
+        $permissions_modifyFilter = $this->config->GetSystemValue($this->config->_permissions_modifyFilter);
+        if (isset($permissions_modifyFilter)) {
+            $params["document"]["permissions"]["modifyFilter"] = $permissions_modifyFilter;
         }
 
         $canEdit = isset($format["edit"]) && $format["edit"];
         $editable = $file->isUpdateable()
                     && (empty($token) || ($share->getPermissions() & Constants::PERMISSION_UPDATE) === Constants::PERMISSION_UPDATE);
         $params["document"]["permissions"]["edit"] = $editable;
-        if (($editable || $restrictedEditing) && $canEdit) {
+        if ($editable && $canEdit) {
             $ownerId = NULL;
             $owner = $file->getOwner();
             if (!empty($owner)) {
@@ -686,6 +645,11 @@ class EditorController extends Controller {
         $folderLink = NULL;
 
         if (!empty($token)) {
+            if (method_exists($share, "getHideDownload") && $share->getHideDownload()) {
+                $params["document"]["permissions"]["download"] = false;
+                $params["document"]["permissions"]["print"] = false;
+            }
+
             $node = $share->getNode();
             if ($node instanceof Folder) {
                 $sharedFolder = $node;
@@ -724,6 +688,8 @@ class EditorController extends Controller {
         }
 
         $params = $this->setCustomization($params);
+
+        $params = $this->setWatermark($params, !empty($token), $userId, $fileId);
 
         if ($this->config->UseDemo()) {
             $params["editorConfig"]["tenant"] = $this->config->GetSystemValue("instanceid", true);
@@ -845,7 +811,6 @@ class EditorController extends Controller {
      */
     private function getShare($token) {
         if (empty($token)) {
-          error_log("Token en editor controller: ".$fileId);
             return [NULL, $this->trans->t("FileId is empty")];
         }
 
@@ -976,6 +941,114 @@ class EditorController extends Controller {
         }
 
         return $params;
+    }
+
+    /**
+     * Set watermark parameters
+     *
+     * @param array params - file parameters
+     * @param bool isPublic - with access token
+     * @param string userId - user identifier
+     * @param string fileId - file identifier
+     *
+     * @return array
+     */
+    private function setWatermark($params, $isPublic, $userId, $fileId) {
+        $watermarkTemplate = $this->getWatermarkText($isPublic, $userId, $fileId,
+            $params["document"]["permissions"]["edit"] !== false,
+            $params["document"]["permissions"]["download"] !== false);
+
+        if ($watermarkTemplate !== false) {
+            $replacements = [
+                "userId" => $userId,
+                "date" => (new \DateTime())->format("Y-m-d H:i:s"),
+                "themingName" => \OC::$server->getThemingDefaults()->getName()
+            ];
+            $watermarkTemplate = preg_replace_callback("/{(.+?)}/", function($matches) use ($replacements)
+                {
+                    return $replacements[$matches[1]];
+                }, $watermarkTemplate);
+
+            $params["document"]["options"] = [
+                "watermark_on_draw" => [
+                    "align" => 1,
+                    "height" => 100,
+                    "paragraphs" => array([
+                        "align" => 2,
+                        "runs" => array([
+                            "fill" => [182, 182, 182],
+                            "font-size" => 70,
+                            "text" => $watermarkTemplate,
+                        ])
+                    ]),
+                    "rotate" => -45,
+                    "width" => 250,
+                ]
+            ];
+        }
+
+        return $params;
+    }
+
+    /**
+     * Should watermark
+     *
+     * @return bool|string
+     */
+    private function getWatermarkText($isPublic, $userId, $fileId, $canEdit, $canDownload) {
+        $watermarkSettings = $this->config->GetWatermarkSettings();
+        if (!$watermarkSettings["enabled"]) {
+            return false;
+        }
+
+        $watermarkText = $watermarkSettings["text"];
+
+        if ($isPublic) {
+            if ($watermarkSettings["linkAll"]) {
+                return $watermarkText;
+            }
+            if ($watermarkSettings["linkRead"] && !$canEdit) {
+                return $watermarkText;
+            }
+            if ($watermarkSettings["linkSecure"] && !$canDownload) {
+                return $watermarkText;
+            }
+            if ($watermarkSettings["linkTags"]) {
+                $tags = $watermarkSettings["linkTagsList"];
+                $fileTags = \OC::$server->getSystemTagObjectMapper()->getTagIdsForObjects([$fileId], "files")[$fileId];
+                foreach ($fileTags as $tagId) {
+                    if (in_array($tagId, $tags, true)) {
+                        return $watermarkText;
+                    }
+                }
+            }
+        } else {
+            if ($watermarkSettings["shareAll"]) {
+                return $watermarkText;
+            }
+            if ($watermarkSettings["shareRead"] && !$canEdit) {
+                return $watermarkText;
+            }
+        }
+        if ($watermarkSettings["allGroups"]) {
+            $groups = $watermarkSettings["allGroupsList"];
+            foreach ($groups as $group) {
+                if (\OC::$server->getGroupManager()->isInGroup($userId, $group)) {
+                    return $watermarkText;
+                }
+            }
+        }
+        if ($watermarkSettings["allTags"]) {
+            $tags = $watermarkSettings["allTagsList"];
+            $fileTags = \OC::$server->getSystemTagObjectMapper()->getTagIdsForObjects([$fileId], "files")[$fileId];
+            foreach ($fileTags as $tagId) {
+                if (in_array($tagId, $tags, true)) {
+                    return $watermarkText;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

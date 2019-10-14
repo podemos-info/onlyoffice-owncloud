@@ -29,6 +29,7 @@
 
 namespace OCA\Onlyoffice\Controller;
 
+use OCP\App;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IL10N;
@@ -121,14 +122,15 @@ class SettingsController extends Controller {
             "currentServer" => $this->urlGenerator->getAbsoluteURL("/"),
             "formats" => $this->config->FormatsSetting(),
             "sameTab" => $this->config->GetSameTab(),
-            "encryption" => ($this->config->checkEncryptionModule() === true),
             "limitGroups" => $this->config->GetLimitGroups(),
             "chat" => $this->config->GetCustomizationChat(),
             "compactHeader" => $this->config->GetCustomizationCompactHeader(),
             "feedback" => $this->config->GetCustomizationFeedback(),
             "help" => $this->config->GetCustomizationHelp(),
             "toolbarNoTabs" => $this->config->GetCustomizationToolbarNoTabs(),
-            "successful" => $this->config->SettingsAreSuccessful()
+            "successful" => $this->config->SettingsAreSuccessful(),
+            "watermark" => $this->config->GetWatermarkSettings(),
+            "tagsEnabled" => App::isEnabled("systemtags")
         ];
         return new TemplateResponse($this->appName, "settings", $data, "blank");
     }
@@ -137,8 +139,8 @@ class SettingsController extends Controller {
      * Save address settings
      *
      * @param string $documentserver - document service address
-     * @param string $documentserverInternal - document service address available from ownCloud
-     * @param string $storageUrl - ownCloud address available from document server
+     * @param string $documentserverInternal - document service address available from Nextcloud
+     * @param string $storageUrl - Nextcloud address available from document server
      * @param string $secret - secret key for signature
      * @param bool $demo - use demo server
      *
@@ -165,10 +167,6 @@ class SettingsController extends Controller {
             if (!empty($documentserver)) {
                 $error = $this->checkDocServiceUrl();
                 $this->config->SetSettingsError($error);
-            }
-
-            if ($this->config->checkEncryptionModule() === true) {
-                $this->logger->info("SaveSettings when encryption is enabled", array("app" => $this->appName));
             }
         }
 
@@ -216,6 +214,28 @@ class SettingsController extends Controller {
         $this->config->SetCustomizationFeedback($feedback);
         $this->config->SetCustomizationHelp($help);
         $this->config->SetCustomizationToolbarNoTabs($toolbarNoTabs);
+
+        return [
+            ];
+    }
+
+    /**
+     * Save watermark settings
+     *
+     * @param array $settings - watermark settings
+     *
+     * @return array
+     */
+    public function SaveWatermark($settings) {
+
+        if ($settings["enabled"] === "true") {
+            $settings["text"] = ($settings["text"]).trim();
+            if (empty($settings["text"])) {
+                $settings["text"] = $this->trans->t("DO NOT SHARE THIS") . " {userId} {date}";
+            }
+        }
+
+        $this->config->SetWatermarkSettings($settings);
 
         return [
             ];

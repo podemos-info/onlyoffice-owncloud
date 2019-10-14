@@ -33,7 +33,6 @@ OC.L10N.register(
     "Bad Response. Errors: " : "Respuesta Mala. Errores:",
     "Documentation" : "Documentación",
     "ONLYOFFICE Document Service Location specifies the address of the server with the document services installed. Please change the '<documentserver>' for the server address in the below line." : "Ubicación del Servidor de Documentos de ONLYOFFICE especifica la dirección del servidor con los servicios de documentos instalados. Por favor, cambie '<documentserver>' para la dirección de servidor en la línea inferior.",
-    "Encryption App is enabled, the application cannot work. You can continue working with the application if you enable master key." : "Aplicación de encriptación está activada, esta aplicación no puede funcionar. Usted puede seguir trabajando con la aplicación si activa la clave maestra.",
     "Document Editing Service address" : "Dirección del Servicio de Edición de Documentos",
     "Advanced server settings" : "Ajustes de servidor avanzados",
     "Document Editing Service address for internal requests from the server" : "Dirección del Servicio de Edición de Documentos para solicitudes internas del servidor",
@@ -46,10 +45,6 @@ OC.L10N.register(
     "Save" : "Guardar",
     "Mixed Active Content is not allowed. HTTPS address for Document Server is required." : "Contenido Mixto Activo no está permitido. Se requiere la dirección HTTPS para Servidor de Documentos.",
     "Restrict access to editors to following groups" : "Restringir el acceso a editores a siguientes grupos",
-    "review" : "revista",
-    "form filling" : "relleno de formulario",
-    "comment" : "comentarios",
-    "download" : "descargar",
     "Server settings" : "Ajustes de servidor",
     "Common settings" : "Ajustes comunes",
     "Editor customization settings" : "Ajustes del editor",
@@ -62,6 +57,8 @@ OC.L10N.register(
     "Save as" : "Guardar como",
     "File saved" : "El archivo ha sido guardado",
     "Insert image" : "Insertar imagen",
-    "Select recipients" : "Seleccionar destinatarios"
+    "Select recipients" : "Seleccionar destinatarios",
+    "Secure view enables you to secure documents by embedding a watermark" : "La vista segura permite asegurar documentos mediante la inserción de una marca de agua en ellos",
+    "Supported placeholders" : "Marcadores soportados"
 },
 "nplurals=2; plural=(n != 1);");

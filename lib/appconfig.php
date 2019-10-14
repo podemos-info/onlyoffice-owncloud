@@ -78,14 +78,14 @@ class AppConfig {
     private $_documentserver = "DocumentServerUrl";
 
     /**
-     * The config key for the document server address available from ownCloud
+     * The config key for the document server address available from Nextcloud
      *
      * @var string
      */
     private $_documentserverInternal = "DocumentServerInternalUrl";
 
     /**
-     * The config key for the ownCloud address available from document server
+     * The config key for the Nextcloud address available from document server
      *
      * @var string
      */
@@ -188,6 +188,20 @@ class AppConfig {
      * @var string
      */
     private $_settingsError = "settings_error";
+
+    /**
+     * Application name for watermark settings
+     *
+     * @var string
+     */
+    const WATERMARK_APP_NAMESPACE = "files";
+
+    /**
+     * The config key for the modifyFilter
+     *
+     * @var string
+     */
+    public $_permissions_modifyFilter = "permissions_modifyFilter";
 
     /**
      * The config key for the customer
@@ -363,7 +377,7 @@ class AppConfig {
     }
 
     /**
-     * Save the document service address available from ownCloud to the application configuration
+     * Save the document service address available from Nextcloud to the application configuration
      *
      * @param string $documentServerInternal - document service address
      */
@@ -382,7 +396,7 @@ class AppConfig {
     }
 
     /**
-     * Get the document service address available from ownCloud from the application configuration
+     * Get the document service address available from Nextcloud from the application configuration
      *
      * @param bool $origin - take origin
      *
@@ -431,7 +445,7 @@ class AppConfig {
     }
 
     /**
-     * Save the ownCloud address available from document server to the application configuration
+     * Save the Nextcloud address available from document server to the application configuration
      *
      * @param string $documentServer - document service address
      */
@@ -450,7 +464,7 @@ class AppConfig {
     }
 
     /**
-     * Get the ownCloud address available from document server from the application configuration
+     * Get the Nextcloud address available from document server from the application configuration
      *
      * @return string
      */
@@ -680,6 +694,92 @@ class AppConfig {
     }
 
     /**
+     * Save watermark settings
+     *
+     * @param array $settings - watermark settings
+     */
+    public function SetWatermarkSettings($settings) {
+        if ($settings["enabled"] !== "true") {
+            $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_enabled", "no");
+            return;
+        }
+
+        $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_text", trim($settings["text"]));
+
+        $watermarkLabels = [
+            "allGroups",
+            "allTags",
+            "linkAll",
+            "linkRead",
+            "linkSecure",
+            "linkTags",
+            "enabled",
+            "shareAll",
+            "shareRead",
+        ];
+        foreach ($watermarkLabels as $key) {
+            if ($settings[$key] !== null) {
+                $value = $settings[$key] === "true" ? "yes" : "no";
+                $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
+            }
+        }
+
+        $watermarkLists = [
+            "allGroupsList",
+            "allTagsList",
+            "linkTagsList",
+        ];
+        foreach ($watermarkLists as $key) {
+            if ($settings[$key] !== null) {
+                $value = implode(",", $settings[$key]);
+                $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
+            }
+        }
+    }
+
+    /**
+     * Get watermark settings
+     *
+     * @return bool|array
+     */
+    public function GetWatermarkSettings() {
+        $result = [
+            "text" => $this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_text", "{userId}"),
+        ];
+
+        $watermarkLabels = [
+            "allGroups",
+            "allTags",
+            "linkAll",
+            "linkRead",
+            "linkSecure",
+            "linkTags",
+            "enabled",
+            "shareAll",
+            "shareRead",
+        ];
+
+        $trueResult = array("on", "yes", "true");
+        foreach ($watermarkLabels as $key) {
+            $value = $this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, "no");
+            $result[$key] = in_array($value, $trueResult);
+        }
+
+        $watermarkLists = [
+            "allGroupsList",
+            "allTagsList",
+            "linkTagsList",
+        ];
+
+        foreach ($watermarkLists as $key) {
+            $value = $this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, []);
+            $result[$key] = $value !== "" ? explode(",", $value) : [];
+        }
+
+        return $result;
+    }
+
+    /**
      * Save the list of groups
      *
      * @param array $groups - the list of groups
@@ -792,28 +892,6 @@ class AppConfig {
     }
 
     /**
-     * Checking encryption enabled
-     *
-     * @return string|bool
-    */
-    public function checkEncryptionModule() {
-        if (!\OC::$server->getAppManager()->isInstalled("encryption")) {
-            return false;
-        }
-        if (!\OC::$server->getEncryptionManager()->isEnabled()) {
-            return false;
-        }
-
-        $crypt = new \OCA\Encryption\Crypto\Crypt(\OC::$server->getLogger(), \OC::$server->getUserSession(), \OC::$server->getConfig(), \OC::$server->getL10N("encryption"));
-        $util = new \OCA\Encryption\Util(new \OC\Files\View(), $crypt, \OC::$server->getLogger(), \OC::$server->getUserSession(), \OC::$server->getConfig(), \OC::$server->getUserManager());
-        if ($util->isMasterKeyEnabled()) {
-            return "master";
-        }
-
-        return true;
-    }
-
-    /**
      * Get supported formats
      *
      * @return array
@@ -850,8 +928,7 @@ class AppConfig {
         "csv" => [ "mime" => "text/csv", "type" => "spreadsheet", "edit" => true, "editable" => true ],
         "doc" => [ "mime" => "application/msword", "type" => "text", "conv" => true ],
         "docm" => [ "mime" => "application/vnd.ms-word.document.macroEnabled.12", "type" => "text", "conv" => true ],
-        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true, "review" => true, "fillForms" => true ],
-        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true, "review" => true, "fillForms" => true, "comment" => true ],
+        "docx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "type" => "text", "edit" => true, "def" => true ],
         "dot" => [ "type" => "text", "conv" => true ],
         "dotx" => [ "mime" => "application/vnd.openxmlformats-officedocument.wordprocessingml.template", "type" => "text", "conv" => true ],
         "epub" => [ "mime" => "application/epub+zip", "type" => "text", "conv" => true ],
@@ -869,12 +946,12 @@ class AppConfig {
         "ppsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.slideshow", "type" => "presentation", "conv" => true ],
         "ppt" => [ "mime" => "application/vnd.ms-powerpoint", "type" => "presentation", "conv" => true ],
         "pptm" => [ "mime" => "application/vnd.ms-powerpoint.presentation.macroEnabled.12", "type" => "presentation", "conv" => true ],
-        "pptx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.presentation", "type" => "presentation", "edit" => true, "def" => true, "comment" => true ],
+        "pptx" => [ "mime" => "application/vnd.openxmlformats-officedocument.presentationml.presentation", "type" => "presentation", "edit" => true, "def" => true ],
         "rtf" => [ "mime" => "text/rtf", "type" => "text", "conv" => true, "editable" => true ],
         "txt" => [ "mime" => "text/plain", "type" => "text", "edit" => true, "editable" => true ],
         "xls" => [ "mime" => "application/vnd.ms-excel", "type" => "spreadsheet", "conv" => true ],
         "xlsm" => [ "mime" => "application/vnd.ms-excel.sheet.macroEnabled.12", "type" => "spreadsheet", "conv" => true ],
-        "xlsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "type" => "spreadsheet", "edit" => true, "def" => true, "comment" => true, "modifyFilter" => true ],
+        "xlsx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "type" => "spreadsheet", "edit" => true, "def" => true ],
         "xlt" => [ "type" => "spreadsheet", "conv" => true ],
         "xltm" => [ "mime" => "application/vnd.ms-excel.template.macroEnabled.12", "type" => "spreadsheet", "conv" => true ],
         "xltx" => [ "mime" => "application/vnd.openxmlformats-officedocument.spreadsheetml.template", "type" => "spreadsheet", "conv" => true ]

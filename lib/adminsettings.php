@@ -47,8 +47,11 @@ class AdminSettings implements ISettings {
      *
      * @return TemplateResponse
      */
-    public function getPanel() {
-        return $this->getForm();
+    public function getForm() {
+        $app = new Application();
+        $container = $app->getContainer();
+        $response = $container->query(SettingsController::class)->index();
+        return $response;
     }
 
     /**
@@ -56,8 +59,8 @@ class AdminSettings implements ISettings {
      *
      * @return string
      */
-    public function getSectionID() {
-        return "general";
+    public function getSection() {
+        return "onlyoffice";
     }
 
     /**

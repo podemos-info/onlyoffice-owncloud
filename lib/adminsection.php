@@ -27,21 +27,60 @@
  *
  */
 
-return [
-    "routes" => [
-       ["name" => "callback#download", "url" => "/download", "verb" => "GET"],
-       ["name" => "callback#emptyfile", "url" => "/empty", "verb" => "GET"],
-       ["name" => "callback#track", "url" => "/track", "verb" => "POST"],
-       ["name" => "editor#index", "url" => "/{fileId}", "verb" => "GET"],
-       ["name" => "editor#public_page", "url" => "/s/{token}", "verb" => "GET"],
-       ["name" => "editor#config", "url" => "/ajax/config/{fileId}", "verb" => "GET"],
-       ["name" => "editor#create", "url" => "/ajax/new", "verb" => "POST"],
-       ["name" => "editor#convert", "url" => "/ajax/convert", "verb" => "POST"],
-       ["name" => "editor#save", "url" => "/ajax/save", "verb" => "POST"],
-       ["name" => "editor#url", "url" => "/ajax/url", "verb" => "GET"],
-       ["name" => "settings#save_address", "url" => "/ajax/settings/address", "verb" => "PUT"],
-       ["name" => "settings#save_common", "url" => "/ajax/settings/common", "verb" => "PUT"],
-       ["name" => "settings#save_watermark", "url" => "/ajax/settings/watermark", "verb" => "PUT"],
-       ["name" => "settings#get_settings", "url" => "/ajax/settings", "verb" => "GET"],
-    ]
-];
+namespace OCA\Onlyoffice;
+
+use OCP\IURLGenerator;
+use OCP\Settings\IIconSection;
+
+/**
+ * Settings section for the administration page
+ */
+class AdminSection implements IIconSection {
+
+    /** @var IURLGenerator */
+    private $urlGenerator;
+
+    /**
+     * @param IURLGenerator $urlGenerator - url generator service
+     */
+    public function __construct(IURLGenerator $urlGenerator) {
+        $this->urlGenerator = $urlGenerator;
+    }
+
+
+    /**
+     * Path to an 16*16 icons
+     *
+     * @return strings
+     */
+    public function getIcon() {
+        return $this->urlGenerator->imagePath("onlyoffice", "app-dark.svg");
+    }
+
+    /**
+     * ID of the section
+     *
+     * @returns string
+     */
+    public function getID() {
+        return "onlyoffice";
+    }
+
+    /**
+     * Name of the section
+     *
+     * @return string
+     */
+    public function getName() {
+        return "ONLYOFFICE";
+    }
+
+    /**
+     * Get priority order
+     *
+     * @return int
+     */
+    public function getPriority() {
+        return 50;
+    }
+}

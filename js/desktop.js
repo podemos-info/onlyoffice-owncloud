@@ -41,10 +41,9 @@
     domain += OC.getRootPath();
 
     var data = {
-        displayName: oc_user.displayName,
+        displayName: oc_current_user,
         domain: domain,
-        email: oc_user.email,
-        provider: "ownCloud",
+        provider: "Nextcloud",
     };
 
     window.AscDesktopEditor.execCommand("portal:login", JSON.stringify(data));

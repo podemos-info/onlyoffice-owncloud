@@ -49,6 +49,7 @@ use OCP\AppFramework\OCS\OCSException;
 use OCP\Share\Exceptions\GenericShareException;
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Share\IManager;
+
 use OCA\Onlyoffice\AppConfig;
 use OCA\Onlyoffice\Crypt;
 use OCA\Onlyoffice\DocumentService;
@@ -359,7 +360,6 @@ class CallbackController extends Controller {
             }
 
             $users = isset($payload->users) ? $payload->users : NULL;
-            error_log("users: ".print_r($users, true));
             $key = $payload->key;
             $status = $payload->status;
             $url = isset($payload->url) ? $payload->url : NULL;
@@ -539,7 +539,6 @@ class CallbackController extends Controller {
      * @return array
      */
     private function getShare($token) {
-      error_log("token: ".print_r($token, true));
         if (empty($token)) {
             return [NULL, new JSONResponse(["message" => $this->trans->t("FileId is empty")], Http::STATUS_BAD_REQUEST)];
         }
