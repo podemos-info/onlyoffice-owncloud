@@ -44,9 +44,6 @@ use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
-use OCP\AppFramework\OCS\OCSForbiddenException;
-use OCP\AppFramework\OCS\OCSException;
-use OCP\Share\Exceptions\GenericShareException;
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\Share\IManager;
 
@@ -127,8 +124,7 @@ class CallbackController extends Controller {
         1 => "Editing",
         2 => "MustSave",
         3 => "Corrupted",
-        4 => "Closed",
-	      6 => "EditingSaved",
+        4 => "Closed"
     );
 
     /**
@@ -159,7 +155,6 @@ class CallbackController extends Controller {
         $this->root = $root;
         $this->userSession = $userSession;
         $this->userManager = $userManager;
-        $this->shareManager = $shareManager;
         $this->trans = $trans;
         $this->logger = $logger;
         $this->config = $config;
@@ -391,27 +386,6 @@ class CallbackController extends Controller {
                     } else {
                         $this->logger->debug("Track by anonymous " . $userId, array("app" => $this->appName));
                     }
-
-                    if ($this->config->checkEncryptionModule() === "master") {
-                        \OC_User::setIncognitoMode(true);
-                    }
-
-                $files = $this->root->getUserFolder($userId)->getById($fileId);
-                if (empty($files)) {
-                    $this->logger->info("Files for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("Files not found")], Http::STATUS_NOT_FOUND);
-                }
-                $file = $files[0];
-                if (! $file instanceof File) {
-                    $this->logger->info("File for track not found: " . $fileId, array("app" => $this->appName));
-                    return new JSONResponse(["message" => $this->trans->t("File not found")], Http::STATUS_NOT_FOUND);
-                }
-                if ($file->getParent()->nodeExists(".~lockonlyoffice.".$file->getName()."#")) {
-                    $file->getParent()->get(".~lock.".$file->getName()."#")->delete();
-                    $file->getParent()->get(".~lockonlyoffice.".$file->getName()."#")->delete();
-                    $file->getParent()->get(".~$".$file->getName())->delete();
-                }
-                    $token = isset($hashData->token) ? $hashData->token : NULL;
 
                     \OC_Util::tearDownFS();
                     if (!empty($ownerId)) {
