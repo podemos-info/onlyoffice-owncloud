@@ -9,3 +9,6 @@
 #content[class*='app-'] * {
     width: 100%;
 }
+#content{
+    padding-top: 0 !important;
+}
