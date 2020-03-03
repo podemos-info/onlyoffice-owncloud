@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -30,6 +30,7 @@
 namespace OCA\Onlyoffice\AppInfo;
 
 use OCP\AppFramework\App;
+use OCP\DirectEditing\RegisterDirectEditorEvent;
 use OCP\Share\IManager;
 use OCP\Util;
 
@@ -38,7 +39,7 @@ use OCA\Onlyoffice\Controller\CallbackController;
 use OCA\Onlyoffice\Controller\EditorController;
 use OCA\Onlyoffice\Controller\SettingsController;
 use OCA\Onlyoffice\Crypt;
-use OCA\Onlyoffice\Hookhandler;
+use OCA\Onlyoffice\DirectEditor;
 
 class Application extends App {
 
@@ -79,7 +80,8 @@ class Application extends App {
 
         $eventDispatcher->addListener("OCA\Files_Sharing::loadAdditionalScripts",
             function() {
-                if (!empty($this->appConfig->GetDocumentServerUrl()) && $this->appConfig->SettingsAreSuccessful()) {
+                if (!empty($this->appConfig->GetDocumentServerUrl())
+                    && $this->appConfig->SettingsAreSuccessful()) {
                     Util::addScript("onlyoffice", "main");
                     Util::addStyle("onlyoffice", "main");
                 }
@@ -104,6 +106,10 @@ class Application extends App {
             return $c->query("ServerContainer")->getUserSession();
         });
 
+        $container->registerService("UserManager", function($c) {
+            return $c->query("ServerContainer")->getUserManager();
+        });
+
         $container->registerService("Logger", function($c) {
             return $c->query("ServerContainer")->getLogger();
         });
@@ -111,6 +117,28 @@ class Application extends App {
         $container->registerService("URLGenerator", function($c) {
             return $c->query("ServerContainer")->getURLGenerator();
         });
+
+        if (class_exists("OCP\DirectEditing\RegisterDirectEditorEvent")) {
+            $container->registerService("DirectEditor", function($c) {
+                return new DirectEditor(
+                    $c->query("AppName"),
+                    $c->query("URLGenerator"),
+                    $c->query("L10N"),
+                    $c->query("Logger"),
+                    $this->appConfig,
+                    $this->crypt
+                );
+            });
+
+            $eventDispatcher->addListener(RegisterDirectEditorEvent::class,
+                function (RegisterDirectEditorEvent $event) use ($container) {
+                    if (!empty($this->appConfig->GetDocumentServerUrl())
+                        && $this->appConfig->SettingsAreSuccessful()) {
+                        $editor = $container->query("DirectEditor");
+                        $event->register($editor);
+                    }
+                });
+        }
 
 
         // Controllers
@@ -132,13 +160,15 @@ class Application extends App {
                 $c->query("Request"),
                 $c->query("RootStorage"),
                 $c->query("UserSession"),
+                $c->query("UserManager"),
                 $c->query("URLGenerator"),
                 $c->query("L10N"),
                 $c->query("Logger"),
                 $this->appConfig,
                 $this->crypt,
                 $c->query("IManager"),
-                $c->query("Session")
+                $c->query("Session"),
+                $c->query("ClientService")
             );
         });
 
@@ -148,8 +178,7 @@ class Application extends App {
                 $c->query("Request"),
                 $c->query("RootStorage"),
                 $c->query("UserSession"),
-                $c->query("ServerContainer")->getUserManager(),
-                $c->query("ServerContainer")->getShareManager(),
+                $c->query("UserManager"),
                 $c->query("L10N"),
                 $c->query("Logger"),
                 $this->appConfig,

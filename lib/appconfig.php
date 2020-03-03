@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -239,6 +239,20 @@ class AppConfig {
     public $_customization_logo = "customization_logo";
 
     /**
+     * The config key for the zoom
+     *
+     * @var string
+     */
+    public $_customization_zoom = "customization_zoom";
+
+    /**
+     * The config key for the autosave
+     *
+     * @var string
+     */
+    public $_customization_autosave = "customization_autosave";
+
+    /**
      * @param string $AppName - application name
      */
     public function __construct($AppName) {
@@ -346,7 +360,7 @@ class AppConfig {
             }
         }
 
-        $this->logger->info("SetDocumentServerUrl: " . $documentServer, array("app" => $this->appName));
+        $this->logger->info("SetDocumentServerUrl: $documentServer", array("app" => $this->appName));
 
         $this->config->setAppValue($this->appName, $this->_documentserver, $documentServer);
     }
@@ -390,7 +404,7 @@ class AppConfig {
             }
         }
 
-        $this->logger->info("SetDocumentServerInternalUrl: " . $documentServerInternal, array("app" => $this->appName));
+        $this->logger->info("SetDocumentServerInternalUrl: $documentServerInternal", array("app" => $this->appName));
 
         $this->config->setAppValue($this->appName, $this->_documentserverInternal, $documentServerInternal);
     }
@@ -436,7 +450,7 @@ class AppConfig {
 
             if ($from !== $documentServerUrl)
             {
-                $this->logger->debug("Replace url from " . $from . " to " . $documentServerUrl, array("app" => $this->appName));
+                $this->logger->debug("Replace url from $from to $documentServerUrl", array("app" => $this->appName));
                 $url = str_replace($from, $documentServerUrl, $url);
             }
         }
@@ -458,7 +472,7 @@ class AppConfig {
             }
         }
 
-        $this->logger->info("SetStorageUrl: " . $storageUrl, array("app" => $this->appName));
+        $this->logger->info("SetStorageUrl: $storageUrl", array("app" => $this->appName));
 
         $this->config->setAppValue($this->appName, $this->_storageUrl, $storageUrl);
     }
@@ -482,6 +496,7 @@ class AppConfig {
      * @param string $secret - secret key
      */
     public function SetDocumentServerSecret($secret) {
+        $secret = trim($secret);
         if (empty($secret)) {
             $this->logger->info("Clear secret key", array("app" => $this->appName));
         } else {
@@ -530,7 +545,7 @@ class AppConfig {
      */
     public function SetDefaultFormats($formats) {
         $value = json_encode($formats);
-        $this->logger->info("Set default formats: " . $value, array("app" => $this->appName));
+        $this->logger->info("Set default formats: $value", array("app" => $this->appName));
 
         $this->config->setAppValue($this->appName, $this->_defFormats, $value);
     }
@@ -542,6 +557,31 @@ class AppConfig {
      */
     private function GetDefaultFormats() {
         $value = $this->config->getAppValue($this->appName, $this->_defFormats, "");
+        if (empty($value)) {
+            return array();
+        }
+        return json_decode($value, true);
+    }
+
+    /**
+     * Save an array of formats that is opened for editing
+     *
+     * @param array $formats - formats with status
+     */
+    public function SetEditableFormats($formats) {
+        $value = json_encode($formats);
+        $this->logger->info("Set editing formats: $value", array("app" => $this->appName));
+
+        $this->config->setAppValue($this->appName, $this->_editFormats, $value);
+    }
+
+    /**
+     * Get an array of formats opening for editing
+     *
+     * @return array
+     */
+    private function GetEditableFormats() {
+        $value = $this->config->getAppValue($this->appName, $this->_editFormats, "");
         if (empty($value)) {
             return array();
         }
@@ -718,10 +758,11 @@ class AppConfig {
             "shareRead",
         ];
         foreach ($watermarkLabels as $key) {
-            if ($settings[$key] !== null) {
-                $value = $settings[$key] === "true" ? "yes" : "no";
-                $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
+            if (empty($settings[$key])) {
+                $settings[$key] = array();
             }
+            $value = $settings[$key] === "true" ? "yes" : "no";
+            $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
         }
 
         $watermarkLists = [
@@ -730,10 +771,11 @@ class AppConfig {
             "linkTagsList",
         ];
         foreach ($watermarkLists as $key) {
-            if ($settings[$key] !== null) {
-                $value = implode(",", $settings[$key]);
-                $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
+            if (empty($settings[$key])) {
+                $settings[$key] = array();
             }
+            $value = implode(",", $settings[$key]);
+            $this->config->setAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, $value);
         }
     }
 
@@ -772,8 +814,8 @@ class AppConfig {
         ];
 
         foreach ($watermarkLists as $key) {
-            $value = $this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, []);
-            $result[$key] = $value !== "" ? explode(",", $value) : [];
+            $value = $this->config->getAppValue(AppConfig::WATERMARK_APP_NAMESPACE, "watermark_" . $key, "");
+            $result[$key] = !empty($value) ? explode(",", $value) : [];
         }
 
         return $result;
@@ -789,7 +831,7 @@ class AppConfig {
             $groups = array();
         }
         $value = json_encode($groups);
-        $this->logger->info("Set groups: " . $value, array("app" => $this->appName));
+        $this->logger->info("Set groups: $value", array("app" => $this->appName));
 
         $this->config->setAppValue($this->appName, $this->_groups, $value);
     }
@@ -835,7 +877,7 @@ class AppConfig {
             // group unknown -> error and allow nobody
             $group = \OC::$server->getGroupManager()->get($groupName);
             if ($group === null) {
-                \OC::$server->getLogger()->error("Group is unknown " . $groupName, ["app" => $this->appName]);
+                \OC::$server->getLogger()->error("Group is unknown $groupName", ["app" => $this->appName]);
             } else {
                 if ($group->inGroup($user)) {
                     return true;

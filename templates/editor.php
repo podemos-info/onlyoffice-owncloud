@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -31,11 +31,19 @@
     style("onlyoffice", "fixes");
     script("onlyoffice", "desktop");
     script("onlyoffice", "editor");
+    if (!empty($_["directToken"])) {
+        script("onlyoffice", "directeditor");
+    }
 ?>
 
 <div id="app">
 
-    <div id="iframeEditor" data-id="<?php p($_["fileId"]) ?>" data-path="<?php p($_["filePath"]) ?>" data-token="<?php p($_["token"]) ?>"></div>
+    <div id="iframeEditor"
+        data-id="<?php p($_["fileId"]) ?>"
+        data-path="<?php p($_["filePath"]) ?>"
+        data-sharetoken="<?php p($_["shareToken"]) ?>"
+        data-directtoken="<?php p($_["directToken"]) ?>"
+        data-inframe="<?php p($_["inframe"]) ?>"></div>
 
     <?php if (!empty($_["documentServerUrl"])) { ?>
         <script nonce="<?php p(base64_encode($_["requesttoken"])) ?>"

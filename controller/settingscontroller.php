@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -152,6 +152,7 @@ class SettingsController extends Controller {
                                     $secret,
                                     $demo
                                     ) {
+        $error = null;
         if (!$this->config->SelectDemo($demo === true)) {
             $error = $this->trans->t("The 30-day test period is over, you can no longer connect to demo ONLYOFFICE Document Server.");
         }
@@ -229,7 +230,7 @@ class SettingsController extends Controller {
     public function SaveWatermark($settings) {
 
         if ($settings["enabled"] === "true") {
-            $settings["text"] = ($settings["text"]).trim();
+            $settings["text"] = trim($settings["text"]);
             if (empty($settings["text"])) {
                 $settings["text"] = $this->trans->t("DO NOT SHARE THIS") . " {userId} {date}";
             }
@@ -331,7 +332,7 @@ class SettingsController extends Controller {
         try {
             $documentService->Request($convertedFileUri);
         } catch (\Exception $e) {
-            $this->logger->error("Request converted file on check error: " . $convertedFileUri . " " . $e->getMessage(), array("app" => $this->appName));
+            $this->logger->error("Request converted file on check error: " . $e->getMessage(), array("app" => $this->appName));
             return $e->getMessage();
         }
 

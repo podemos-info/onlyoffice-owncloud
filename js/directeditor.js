@@ -1,4 +1,3 @@
-<?php
 /**
  *
  * (c) Copyright Ascensio System SIA 2020
@@ -27,60 +26,51 @@
  *
  */
 
-namespace OCA\Onlyoffice;
+(function (OCA) {
 
-use OCP\IURLGenerator;
-use OCP\Settings\IIconSection;
+    OCA.Onlyoffice = _.extend({}, OCA.Onlyoffice);
 
-/**
- * Settings section for the administration page
- */
-class AdminSection implements IIconSection {
+    var callMobileMessage = function (messageName, attributes) {
+        var message = messageName
+        if (typeof attributes !== "undefined") {
+            message = {
+                MessageName: messageName,
+                Values: attributes,
+            };
+        }
+        var attributesString = null
+        try {
+            attributesString = JSON.stringify(attributes);
+        } catch (e) {
+            attributesString = null;
+        }
 
-    /** @var IURLGenerator */
-    private $urlGenerator;
+        // Forward to mobile handler
+        if (window.DirectEditingMobileInterface && typeof window.DirectEditingMobileInterface[messageName] === "function") {
+            if (attributesString === null || typeof attributesString === "undefined") {
+                window.DirectEditingMobileInterface[messageName]();
+            } else {
+                window.DirectEditingMobileInterface[messageName](attributesString);
+            }
+        }
 
-    /**
-     * @param IURLGenerator $urlGenerator - url generator service
-     */
-    public function __construct(IURLGenerator $urlGenerator) {
-        $this->urlGenerator = $urlGenerator;
+        // iOS webkit fallback
+        if (window.webkit
+            && window.webkit.messageHandlers
+            && window.webkit.messageHandlers.DirectEditingMobileInterface) {
+            window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage(message);
+        }
+
+        window.postMessage(message);
     }
 
+    OCA.Onlyoffice.directEditor = {
+        close: function() {
+            callMobileMessage("close");
+        },
+        loaded: function() {
+            callMobileMessage("loaded");
+        }
+    };
 
-    /**
-     * Path to an 16*16 icons
-     *
-     * @return strings
-     */
-    public function getIcon() {
-        return $this->urlGenerator->imagePath("onlyoffice", "app-dark.svg");
-    }
-
-    /**
-     * ID of the section
-     *
-     * @returns string
-     */
-    public function getID() {
-        return "onlyoffice";
-    }
-
-    /**
-     * Name of the section
-     *
-     * @return string
-     */
-    public function getName() {
-        return "ONLYOFFICE";
-    }
-
-    /**
-     * Get priority order
-     *
-     * @return int
-     */
-    public function getPriority() {
-        return 50;
-    }
-}
+})(OCA);

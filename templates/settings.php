@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -31,8 +31,12 @@
     script("onlyoffice", "settings");
 
     if ($_["tagsEnabled"]) {
+        if (\version_compare(\implode(".", \OCP\Util::getVersion()), "16", "<")) {
+            script("core", [
+                "oc-backbone-webdav"
+            ]);
+        }
         script("core", [
-            "oc-backbone-webdav",
             "systemtags/systemtags",
             "systemtags/systemtagmodel",
             "systemtags/systemtagsmappingcollection",

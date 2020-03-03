@@ -1,7 +1,7 @@
 <?php
 /**
  *
- * (c) Copyright Ascensio System SIA 2019
+ * (c) Copyright Ascensio System SIA 2020
  *
  * This program is a free software product.
  * You can redistribute it and/or modify it under the terms of the GNU Affero General Public License
@@ -33,7 +33,7 @@ return [
        ["name" => "callback#emptyfile", "url" => "/empty", "verb" => "GET"],
        ["name" => "callback#track", "url" => "/track", "verb" => "POST"],
        ["name" => "editor#index", "url" => "/{fileId}", "verb" => "GET"],
-       ["name" => "editor#public_page", "url" => "/s/{token}", "verb" => "GET"],
+       ["name" => "editor#public_page", "url" => "/s/{shareToken}", "verb" => "GET"],
        ["name" => "editor#config", "url" => "/ajax/config/{fileId}", "verb" => "GET"],
        ["name" => "editor#create", "url" => "/ajax/new", "verb" => "POST"],
        ["name" => "editor#convert", "url" => "/ajax/convert", "verb" => "POST"],
@@ -43,5 +43,8 @@ return [
        ["name" => "settings#save_common", "url" => "/ajax/settings/common", "verb" => "PUT"],
        ["name" => "settings#save_watermark", "url" => "/ajax/settings/watermark", "verb" => "PUT"],
        ["name" => "settings#get_settings", "url" => "/ajax/settings", "verb" => "GET"],
+    ],
+    "ocs" => [
+        ["name" => "federation#key", "url" => "/api/v1/key", "verb" => "POST"]
     ]
 ];
