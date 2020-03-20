@@ -125,8 +125,7 @@ class CallbackController extends Controller {
         1 => "Editing",
         2 => "MustSave",
         3 => "Corrupted",
-        4 => "Closed",
-	      6 => "EditingSaved",
+        4 => "Closed"
     );
 
     /**
@@ -157,7 +156,6 @@ class CallbackController extends Controller {
         $this->root = $root;
         $this->userSession = $userSession;
         $this->userManager = $userManager;
-        $this->shareManager = $shareManager;
         $this->trans = $trans;
         $this->logger = $logger;
         $this->config = $config;
