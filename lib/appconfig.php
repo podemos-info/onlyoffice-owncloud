@@ -589,31 +589,6 @@ class AppConfig {
     }
 
     /**
-     * Save an array of formats that is opened for editing
-     *
-     * @param array $formats - formats with status
-     */
-    public function SetEditableFormats($formats) {
-        $value = json_encode($formats);
-        $this->logger->info("Set editing formats: " . $value, array("app" => $this->appName));
-
-        $this->config->setAppValue($this->appName, $this->_editFormats, $value);
-    }
-
-    /**
-     * Get an array of formats opening for editing
-     *
-     * @return array
-     */
-    private function GetEditableFormats() {
-        $value = $this->config->getAppValue($this->appName, $this->_editFormats, "");
-        if (empty($value)) {
-            return array();
-        }
-        return json_decode($value, true);
-    }
-
-    /**
      * Save the opening setting in a same tab
      *
      * @param bool $value - same tab
