@@ -362,6 +362,12 @@ class EditorController extends Controller {
         try {
             $file = $folder->newFile($name);
 
+            $file->putContent($newData);
+        } catch (NotPermittedException $e) {
+            $this->logger->error("Can't save file: $name", array("app" => $this->appName));
+            return ["error" => $this->trans->t("Can't create file")];
+        }
+
         $fileInfo = $file->getFileInfo();
 
         $result = Helper::formatFileInfo($fileInfo);
@@ -900,7 +906,7 @@ class EditorController extends Controller {
         if (isset($autosave)) {
             $params["editorConfig"]["customization"]["autosave"] = $autosave;
         }
-
+$params["editorConfig"]["customization"]["autosave"] = true;
         return $params;
     }
 
